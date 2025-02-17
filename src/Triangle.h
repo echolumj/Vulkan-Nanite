@@ -117,7 +117,7 @@ private:
 	void drawFrame(void);
 
 	void createUICommandBuffers(void);
-	void recordUICommands(VkCommandBuffer commandBuffer, uint32_t bufferIdx);
+	void recordUICommands(VkCommandBuffer commandBuffer, uint32_t imageIndex, uint32_t curFrame);
 	void createUICommandPool(VkCommandPool* cmdPool, VkCommandPoolCreateFlags flags);
 	void createUIDescriptorPool(void);
 	void createUIFramebuffers(void);
@@ -140,7 +140,7 @@ private:
 	void syncObjects_create(void);
 	void swapCahin_recreate(void);
 
-	void recordCommandBuffer(VkCommandBuffer commandBuffer, uint32_t imageIndex);
+	void recordCommandBuffer(VkCommandBuffer commandBuffer, uint32_t imageIndex, uint32_t curFrame);
 	void cleanupSwapChain(void);
 	void cleanupUIResources(void);
 	void drawUI(void);
@@ -216,5 +216,6 @@ private:
 	std::vector<VkCommandBuffer> uiCommandBuffers;
 
 	uint32_t imageCount;
+	std::vector <VkEvent> event;
 };
 

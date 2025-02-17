@@ -21,7 +21,8 @@ const std::vector<Vertex> vertices = {
 
 //check whether the physical device support the required extensions 
 const std::vector<const char*> requireExtensions = {
-	VK_KHR_SWAPCHAIN_EXTENSION_NAME
+	VK_KHR_SWAPCHAIN_EXTENSION_NAME,
+	VK_KHR_SYNCHRONIZATION_2_EXTENSION_NAME
 };
 
 const std::vector<const char*> validationLayers = {
@@ -210,9 +211,9 @@ void Triangle::drawFrame(void)
 
 	//2.Submitting the command buffer
 	vkResetCommandBuffer(commandBuffers[currentFrame], 0);
-	recordCommandBuffer(commandBuffers[currentFrame], imageIndex);
+	recordCommandBuffer(commandBuffers[currentFrame], imageIndex, currentFrame);
 	vkResetCommandBuffer(uiCommandBuffers[currentFrame], 0);
-	recordUICommands(uiCommandBuffers[currentFrame], imageIndex);
+	recordUICommands(uiCommandBuffers[currentFrame], imageIndex, currentFrame);
 
 	std::vector<VkSemaphore> waitSemaphores{ imageAvailableSemaphores[currentFrame] };
 	VkPipelineStageFlags waitStages[] = { VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT };
@@ -335,6 +336,7 @@ void Triangle::clean_up(void)
 		vkDestroySemaphore(logicalDevice, imageAvailableSemaphores[i], nullptr);
 		vkDestroySemaphore(logicalDevice, renderFinishedSemaphores[i], nullptr);
 		vkDestroyFence(logicalDevice, inFlightFences[i], nullptr);
+		vkDestroyEvent(logicalDevice, event[i], nullptr);
 	}
 	vkDestroyBuffer(logicalDevice, vertexBuffer, nullptr);
 	vkFreeMemory(logicalDevice, vertexBufferMem, nullptr);
@@ -782,7 +784,7 @@ void Triangle::renderPass_create(void)
 	dependency.srcSubpass = VK_SUBPASS_EXTERNAL;
 	dependency.dstSubpass = 0; //index of subpass
 	dependency.srcStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
-	dependency.srcAccessMask = 0;
+	dependency.srcAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
 	dependency.dstStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
 	dependency.dstAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
 
@@ -1080,7 +1082,7 @@ void Triangle::commandPool_create(void)
 
 }
 
-void Triangle::recordCommandBuffer(VkCommandBuffer commandBuffer, uint32_t imageIndex)
+void Triangle::recordCommandBuffer(VkCommandBuffer commandBuffer, uint32_t imageIndex, uint32_t curFrame)
 {
 	VkCommandBufferBeginInfo beginInfo{};
 	beginInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
@@ -1131,6 +1133,8 @@ void Triangle::recordCommandBuffer(VkCommandBuffer commandBuffer, uint32_t image
 
 	vkCmdEndRenderPass(commandBuffer);
 
+	vkCmdSetEvent(commandBuffer, event[curFrame], VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT);
+
 	if (vkEndCommandBuffer(commandBuffer) != VK_SUCCESS)
 	{
 		throw std::runtime_error("failed to record command buffer!");
@@ -1159,6 +1163,7 @@ void Triangle::syncObjects_create(void)
 	imageAvailableSemaphores.resize(MAX_FRAMES_IN_FLIGHT);
 	renderFinishedSemaphores.resize(MAX_FRAMES_IN_FLIGHT);
 	inFlightFences.resize(MAX_FRAMES_IN_FLIGHT);
+	event.resize(MAX_FRAMES_IN_FLIGHT);
 
 	imagesInFlight.resize(swapChainImages.size(), VK_NULL_HANDLE);
 
@@ -1169,16 +1174,20 @@ void Triangle::syncObjects_create(void)
 	fenceCreateInfo.sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO;
 	fenceCreateInfo.flags = VK_FENCE_CREATE_SIGNALED_BIT;//initial state of fence = signed
 
+	VkEventCreateInfo eventInfo = {};
+	eventInfo.sType = VK_STRUCTURE_TYPE_EVENT_CREATE_INFO;
+	eventInfo.flags = VK_EVENT_CREATE_DEVICE_ONLY_BIT;
+
 	for (size_t i = 0; i < MAX_FRAMES_IN_FLIGHT; i++)
 	{
 		if (vkCreateSemaphore(logicalDevice, &semaphoreInfo, nullptr, &imageAvailableSemaphores[i]) != VK_SUCCESS ||
 			vkCreateSemaphore(logicalDevice, &semaphoreInfo, nullptr, &renderFinishedSemaphores[i]) != VK_SUCCESS||
-			vkCreateFence(logicalDevice, &fenceCreateInfo, nullptr, &inFlightFences[i]) != VK_SUCCESS)
+			vkCreateFence(logicalDevice, &fenceCreateInfo, nullptr, &inFlightFences[i]) != VK_SUCCESS ||
+			vkCreateEvent(logicalDevice, &eventInfo, nullptr, &event[i]))
 		{
 			throw std::runtime_error("failed to create synchronization objects for a frame!");
 		}
 	}
-
 }
 
 // get basic info of swap chain
@@ -1321,6 +1330,8 @@ std::vector<const char*> Triangle::getRequiredExtensions(void)
 		extensions.push_back(VK_EXT_DEBUG_UTILS_EXTENSION_NAME);
 	}
 
+	extensions.push_back(VK_KHR_GET_PHYSICAL_DEVICE_PROPERTIES_2_EXTENSION_NAME);
+
 	//¡ïprint all required extensions
 	std::cout << "all required extensions" << "\n";
 	for (const auto extension : extensions)
@@ -1343,7 +1354,7 @@ void Triangle::createUICommandBuffers() {
 	}
 }
 
-void Triangle::recordUICommands(VkCommandBuffer commandBuffer, uint32_t bufferIdx) {
+void Triangle::recordUICommands(VkCommandBuffer commandBuffer, uint32_t imageIndex, uint32_t curFrame) {
 	VkCommandBufferBeginInfo cmdBufferBegin = {};
 	cmdBufferBegin.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
 	cmdBufferBegin.flags |= VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
@@ -1356,13 +1367,23 @@ void Triangle::recordUICommands(VkCommandBuffer commandBuffer, uint32_t bufferId
 	VkRenderPassBeginInfo renderPassBeginInfo = {};
 	renderPassBeginInfo.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
 	renderPassBeginInfo.renderPass = uiRenderPass;
-	renderPassBeginInfo.framebuffer = uiFramebuffers[bufferIdx];
+	renderPassBeginInfo.framebuffer = uiFramebuffers[imageIndex];
 	renderPassBeginInfo.renderArea.extent.width = swapChainExtent.width;
 	renderPassBeginInfo.renderArea.extent.height = swapChainExtent.height;
 	renderPassBeginInfo.clearValueCount = 1;
 	renderPassBeginInfo.pClearValues = &clearColor;
 
 	vkCmdBeginRenderPass(commandBuffer, &renderPassBeginInfo, VK_SUBPASS_CONTENTS_INLINE);
+
+	VkPipelineStageFlags srcStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
+	VkPipelineStageFlags dstStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
+
+	VkMemoryBarrier memoryBarrier = {};
+	memoryBarrier.sType = VK_STRUCTURE_TYPE_MEMORY_BARRIER;
+	memoryBarrier.srcAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
+	memoryBarrier.dstAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
+
+	vkCmdWaitEvents(commandBuffer, 1, &event[curFrame], srcStageMask, dstStageMask, 1, &memoryBarrier, 0, nullptr, 0, nullptr);
 
 	// Grab and record the draw data for Dear Imgui
 	ImGui_ImplVulkan_RenderDrawData(ImGui::GetDrawData(), commandBuffer);
