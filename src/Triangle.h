@@ -7,20 +7,22 @@
 #include <GLFW/glfw3.h>
 #include <GLFW/glfw3native.h>
 
-#include <vulkan/vulkan.h>
+#include "sceneManager.h"
+//#include <vulkan/vulkan.h>
 #include <vulkan/vulkan_win32.h>
 
-#include <iostream>
-#include <vector>
+//#include <iostream>
+//#include <vector>
 #include <array>
 #include <optional>
 
-#include <glm/glm.hpp>
-#include <glm/gtc/matrix_transform.hpp>
-#include <glm/gtc/type_ptr.hpp>
+//#include <glm/glm.hpp>
+//#include <glm/gtc/matrix_transform.hpp>
+//#include <glm/gtc/type_ptr.hpp>
 
 #include "imgui/imgui.h"
 #include "imgui/imgui_impl_glfw.h"
+
 #include "imgui/imgui_impl_vulkan.h"
 
 //the size of window
@@ -44,10 +46,12 @@ namespace compute
 
 }
 
+
 namespace triangle
 {
 	struct Vertex {
-		glm::vec2 pos;
+		glm::vec3 pos;
+		glm::vec3 normal;
 		glm::vec3 color;
 
 		static VkVertexInputBindingDescription getBindingDescription() {
@@ -59,18 +63,23 @@ namespace triangle
 			return bindingDescription;
 		}
 
-		static std::array<VkVertexInputAttributeDescription, 2> getAttributeDescriptions() {
-			std::array<VkVertexInputAttributeDescription, 2> attributeDescriptions{};
+		static std::array<VkVertexInputAttributeDescription, 3> getAttributeDescriptions() {
+			std::array<VkVertexInputAttributeDescription, 3> attributeDescriptions{};
 
 			attributeDescriptions[0].binding = 0;
 			attributeDescriptions[0].location = 0;
-			attributeDescriptions[0].format = VK_FORMAT_R32G32_SFLOAT;
+			attributeDescriptions[0].format = VK_FORMAT_R32G32B32_SFLOAT;
 			attributeDescriptions[0].offset = offsetof(Vertex, pos);
 
 			attributeDescriptions[1].binding = 0;
 			attributeDescriptions[1].location = 1;
 			attributeDescriptions[1].format = VK_FORMAT_R32G32B32_SFLOAT;
-			attributeDescriptions[1].offset = offsetof(Vertex, color);
+			attributeDescriptions[1].offset = offsetof(Vertex, normal);
+
+			attributeDescriptions[2].binding = 0;
+			attributeDescriptions[2].location = 2;
+			attributeDescriptions[2].format = VK_FORMAT_R32G32B32_SFLOAT;
+			attributeDescriptions[2].offset = offsetof(Vertex, color);
 
 			return attributeDescriptions;
 		}
@@ -145,8 +154,8 @@ private:
 	void cleanupUIResources(void);
 	void drawUI(void);
 
-	uint32_t findMemoryType(uint32_t typeFilter, VkMemoryPropertyFlags properties);
-	void createBuffer(VkDeviceSize size, VkBufferUsageFlags usage, VkMemoryPropertyFlags properties, VkBuffer& buffer, VkDeviceMemory& bufferMemory);
+	//uint32_t findMemoryType(uint32_t typeFilter, VkMemoryPropertyFlags properties);
+	//void createBuffer(VkDeviceSize size, VkBufferUsageFlags usage, VkMemoryPropertyFlags properties, VkBuffer& buffer, VkDeviceMemory& bufferMemory);
 	void copyBuffer(VkBuffer srcBuffer, VkBuffer dstBuffer, VkDeviceSize size);
 
 	VkCommandBuffer beginSingleTimeCommands(VkCommandPool cmdPool);
@@ -170,8 +179,11 @@ private:
 	void DestoryDebugUtilsMessengerEXT(VkInstance instance, const VkDebugUtilsMessengerEXT debugMessenger, const VkAllocationCallbacks* pAllocator);
 
 	//vertex input
-	VkBuffer vertexBuffer;
-	VkDeviceMemory vertexBufferMem;
+	VkBuffer vertexBuffer = VK_NULL_HANDLE;
+	VkDeviceMemory vertexBufferMem = VK_NULL_HANDLE;
+	VkBuffer indiceBuffer = VK_NULL_HANDLE;
+	VkDeviceMemory indiceBufferMem = VK_NULL_HANDLE;
+	uint32_t modelIndicesNum = 0;
 
 	//handle
 	GLFWwindow* window;
@@ -217,5 +229,8 @@ private:
 
 	uint32_t imageCount;
 	std::vector <VkEvent> event;
+
+	scene::SceneManager* _sceneManager;
+	uint16_t curModelId = -1;
 };
 

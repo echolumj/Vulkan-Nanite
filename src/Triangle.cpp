@@ -14,9 +14,9 @@ const bool enableValidationLayers = true;
 
 
 const std::vector<Vertex> vertices = {
-	{{0.0f, -0.5f}, {1.0f, 0.0f, 0.0f}},
-	{{0.5f, 0.5f}, {0.0f, 1.0f, 0.0f}},
-	{{-0.5f, 0.5f}, {0.0f, 0.0f, 1.0f}}
+	{{0.0f, -0.5f, 0.0f}, {1.0f, 0.0f, 0.0f},{1.0f, 0.0f, 0.0f}},
+	{{0.5f, 0.5f, 0.0f}, {0.0f, 1.0f, 0.0f}, {0.0f, 1.0f, 0.0f}},
+	{{-0.5f, 0.5f, 0.0f}, {0.0f, 0.0f, 1.0f}, {0.0f, 0.0f, 1.0f}}
 };
 
 //check whether the physical device support the required extensions 
@@ -91,6 +91,21 @@ void Triangle::run(void)
 	clean_up();
 }
 
+std::vector<std::string> filePaths;
+
+static void dropCallback(GLFWwindow* window, int count, const char** paths)
+{
+	int i;
+	filePaths.clear();
+	filePaths.resize(count);
+	for (i = 0; i < count; i++)
+	{
+		filePaths[i] = paths[i];
+		std::cout << paths[i] << std::endl; //test
+	}
+	i = 0;
+}
+
 //private part
 void Triangle::window_init(void)
 {
@@ -109,6 +124,7 @@ void Triangle::window_init(void)
 	}
 	glfwSetWindowUserPointer(window, this);
 	glfwSetFramebufferSizeCallback(window, framebufferResizeCallback);
+	glfwSetDropCallback(window, dropCallback);
 }
 
 void Triangle::vulkan_init(void)
@@ -125,7 +141,11 @@ void Triangle::vulkan_init(void)
 	commandPool_create();
 	commondBuffers_create();
 
-	vertexBuffer_create();
+	//basic triangle
+	//vertexBuffer_create();
+	//vertexAndIndiceBuffer_create();
+	_sceneManager = new scene::SceneManager(physicalDevice, logicalDevice);
+
 	
 	graphicsPipline_create();
 	framebuffer_create();
@@ -166,6 +186,17 @@ void Triangle::ui_init(void)
 	ImGui_ImplVulkan_CreateFontsTexture(commandBuffer);
 	endSingleTimeCommands(commandBuffer, uiCommandPool);
 	ImGui_ImplVulkan_DestroyFontUploadObjects();
+
+	// 在 ImGui 初始化时加载字体
+	//ImGuiIO& io = ImGui::GetIO();
+	//io.Fonts->AddFontDefault();
+	//io.Fonts->AddFontFromFileTTF("c:\\Windows\\Fonts\\LBRITE.TTF", 13.0f, nullptr, io.Fonts->GetGlyphRangesChineseFull());
+	//io.Fonts->AddFontFromFileTTF("C:/Windows/Fonts/calibril.ttf", 13.0, nullptr, io.Fonts->GetGlyphRangesDefault());
+
+	//io.Fonts->AddFontFromFileTTF("C:/Windows/Fonts/arial.ttf", 13.0f, nullptr, io.Fonts->GetGlyphRangesChineseFull());
+
+	//// 重要：重建字体纹理
+	//io.Fonts->Build();
 }
 
 void Triangle::main_loop(void)
@@ -174,6 +205,15 @@ void Triangle::main_loop(void)
 	{
 		glfwPollEvents();
 		drawUI();
+
+		if (filePaths.size() > 0)
+		{
+			for (int i = 0; i < filePaths.size(); ++i)
+			{
+				curModelId = _sceneManager->addModel(filePaths[i]);
+			}
+			filePaths.clear();
+		}
 		drawFrame();
 		//★vkQueueWaitIdle(presentQueue);
 	}
@@ -338,8 +378,15 @@ void Triangle::clean_up(void)
 		vkDestroyFence(logicalDevice, inFlightFences[i], nullptr);
 		vkDestroyEvent(logicalDevice, event[i], nullptr);
 	}
-	vkDestroyBuffer(logicalDevice, vertexBuffer, nullptr);
+	/*vkDestroyBuffer(logicalDevice, vertexBuffer, nullptr);
 	vkFreeMemory(logicalDevice, vertexBufferMem, nullptr);
+	vkDestroyBuffer(logicalDevice, indiceBuffer, nullptr);
+	vkFreeMemory(logicalDevice, indiceBufferMem, nullptr);*/
+
+	if (_sceneManager)
+	{
+		delete _sceneManager;
+	}
 
 	vkDestroyCommandPool(logicalDevice, commandPool, nullptr);
 		
@@ -802,49 +849,6 @@ void Triangle::renderPass_create(void)
 	}
 }
 
-uint32_t Triangle::findMemoryType(uint32_t typeFilter, VkMemoryPropertyFlags properties) 
-{
-	VkPhysicalDeviceMemoryProperties memProperties;
-	vkGetPhysicalDeviceMemoryProperties(physicalDevice, &memProperties);
-
-	for (uint32_t i = 0; i < memProperties.memoryTypeCount; ++i)
-	{
-		if (typeFilter & (1 << i) && (memProperties.memoryTypes[i].propertyFlags & properties) == properties)
-		{
-			return i;
-		}
-	}
-
-	throw  std::runtime_error("failed to find suitable memory type!");
-}
-
-void Triangle::createBuffer(VkDeviceSize size, VkBufferUsageFlags usage, VkMemoryPropertyFlags properties, VkBuffer& buffer, VkDeviceMemory& bufferMemory)
-{
-	VkBufferCreateInfo bufferInfo{};
-	bufferInfo.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
-	bufferInfo.size = size;
-	bufferInfo.usage = usage;
-	bufferInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
-
-	if (vkCreateBuffer(logicalDevice, &bufferInfo, nullptr, &buffer) != VK_SUCCESS) {
-		throw std::runtime_error("failed to create buffer!");
-	}
-
-	VkMemoryRequirements memRequirements;
-	vkGetBufferMemoryRequirements(logicalDevice, buffer, &memRequirements);
-
-	VkMemoryAllocateInfo allocInfo{};
-	allocInfo.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
-	allocInfo.allocationSize = memRequirements.size;
-	allocInfo.memoryTypeIndex = findMemoryType(memRequirements.memoryTypeBits, properties);
-
-	if (vkAllocateMemory(logicalDevice, &allocInfo, nullptr, &bufferMemory) != VK_SUCCESS) {
-		throw std::runtime_error("failed to allocate buffer memory!");
-	}
-
-	vkBindBufferMemory(logicalDevice, buffer, bufferMemory, 0);
-}
-
 void Triangle::copyBuffer(VkBuffer srcBuffer, VkBuffer dstBuffer, VkDeviceSize size) 
 {
 	VkCommandBufferAllocateInfo allocInfo{};
@@ -912,7 +916,7 @@ void Triangle::graphicsPipline_create(void)
 	vertexInputCreateInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO;
 	vertexInputCreateInfo.vertexBindingDescriptionCount = 1;
 	vertexInputCreateInfo.pVertexBindingDescriptions = &bindingDesc;
-	vertexInputCreateInfo.vertexAttributeDescriptionCount = 2;
+	vertexInputCreateInfo.vertexAttributeDescriptionCount = 3;
 	vertexInputCreateInfo.pVertexAttributeDescriptions = attributeDesc.data();
 
 	//step 3:input assembly 
@@ -1031,7 +1035,7 @@ void Triangle::graphicsPipline_create(void)
 void Triangle::vertexBuffer_create(void)
 {
 	auto bufferSize = sizeof(vertices[0]) * vertices.size();
-	createBuffer(bufferSize, VK_BUFFER_USAGE_VERTEX_BUFFER_BIT, VK_MEMORY_PROPERTY_HOST_COHERENT_BIT | 
+	vk::VulkanInit::createBuffer(physicalDevice, logicalDevice,  bufferSize, VK_BUFFER_USAGE_VERTEX_BUFFER_BIT, VK_MEMORY_PROPERTY_HOST_COHERENT_BIT | 
 		VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT, vertexBuffer, vertexBufferMem);
 
 	//load data
@@ -1125,11 +1129,51 @@ void Triangle::recordCommandBuffer(VkCommandBuffer commandBuffer, uint32_t image
 	scissor.extent = swapChainExtent;
 	vkCmdSetScissor(commandBuffer, 0, 1, &scissor);
 
-	VkBuffer vertexBuffers[] = { vertexBuffer };
-	VkDeviceSize offsets[] = { 0 };
-	vkCmdBindVertexBuffers(commandBuffer, 0, 1, vertexBuffers, offsets);
+	if (_sceneManager && _sceneManager->getModelSize() > 0)
+	{
+		// After a transfer operation, ensure data is available for vertex shader:
+		//VkBufferMemoryBarrier bufferBarrier = {};
+		//bufferBarrier.sType = VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER;
+		//bufferBarrier.pNext = nullptr;
+		//bufferBarrier.srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;  // 屏障之前是传输写入操作
+		//bufferBarrier.dstAccessMask = VK_ACCESS_VERTEX_ATTRIBUTE_READ_BIT;  // 屏障之后是顶点属性读取操作
+		//bufferBarrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;  // 不需要队列族所有权转移
+		//bufferBarrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;  // 不需要队列族所有权转移
+		//bufferBarrier.buffer = vertexBuffer;  // 需要同步的缓冲区对象
+		//bufferBarrier.offset = 0;       // 从缓冲区的起始位置开始
+		//bufferBarrier.size = VK_WHOLE_SIZE;  // 同步整个缓冲区
 
-	vkCmdDraw(commandBuffer, 3, 1, 0, 0);
+		//// 将屏障插入到命令缓冲区中
+		//vkCmdPipelineBarrier(
+		//	commandBuffer,  // 当前命令缓冲区
+		//	VK_PIPELINE_STAGE_TRANSFER_BIT,  // 源阶段：传输操作
+		//	VK_PIPELINE_STAGE_VERTEX_INPUT_BIT,  // 目标阶段：顶点输入
+		//	0,  // 依赖标志
+		//	0, nullptr,  // 内存屏障数量及指针
+		//	1, &bufferBarrier,  // 缓冲区屏障数量及指针
+		//	0, nullptr  // 图像屏障数量及指针
+		//);
+		//std::vector<VkBuffer> vertexBuffers(_sceneManager->getModelSize());
+		VkDeviceSize offsets[] = { 0 };
+		for (int i = 0; i < _sceneManager->getModelSize(); ++i)
+		{
+			scene::Model model = _sceneManager->getModel(i);
+			//vertexBuffers[i] = ;
+			vkCmdBindVertexBuffers(commandBuffer, 0, 1, &(model.vertex.buffer), offsets);
+
+			vkCmdBindIndexBuffer(commandBuffer, model.indice.buffer, 0, VK_INDEX_TYPE_UINT16);
+			vkCmdDrawIndexed(commandBuffer, model.indice.count, 1, 0, 0, 0);
+		}
+		
+		//vkCmdBindVertexBuffers(commandBuffer, 0, vertexBuffers.size(), vertexBuffers.data(), offsets);
+		//
+		//vkCmdBindIndexBuffer(commandBuffer, model.indice.buffer, 0, VK_INDEX_TYPE_UINT16);
+		//vkCmdDrawIndexed(commandBuffer, model.indice.count, 1, 0, 0, 0);
+
+	}
+
+	//vkCmdDraw(commandBuffer, 3, 1, 0, 0);
+	//vkCmdDrawIndexed(commandBuffer, modelIndicesNum, 1, 0, 0, 0);
 
 	vkCmdEndRenderPass(commandBuffer);
 
@@ -1339,7 +1383,75 @@ std::vector<const char*> Triangle::getRequiredExtensions(void)
 
 	return extensions;
 }
+////************************Module Input**************************//
+//void Triangle::vertexAndIndiceBuffer_create(std::vector<std::string> &paths)
+//{
+//	std::vector<obj::Vertex> objVertices;
+//	std::vector<uint16_t> objIndices;
+//
+//	VkBuffer tempVertexBuffer = VK_NULL_HANDLE;
+//	VkBuffer tempIndiceBuffer = VK_NULL_HANDLE;
+//	VkDeviceMemory tempVertexBufferMem = VK_NULL_HANDLE;
+//	VkDeviceMemory tempIndiceBufferMem = VK_NULL_HANDLE;
+//
+//	if (vertexBuffer != VK_NULL_HANDLE)
+//	{
+//		tempVertexBuffer = vertexBuffer;
+//		tempIndiceBuffer = indiceBuffer;
+//		tempVertexBufferMem = vertexBufferMem;
+//		tempIndiceBufferMem = indiceBufferMem;
+//	}
+//
+//	for (int i = 0; i < paths.size(); ++i)
+//	{
+//		Object* ob = new Object(paths[i].c_str());
+//		auto verticesIn = ob->getVertices();
+//		auto indices = ob->getIndices();
+//
+//		objVertices.insert(objVertices.end(), verticesIn.begin(), verticesIn.end());
+//		objIndices.insert(objIndices.end(), indices.begin(), indices.end());
+//
+//		delete ob;
+//	}
+//
+//	if (objVertices.size() == 0 || objIndices.size() == 0)
+//	{
+//		std::runtime_error("not have vertices or indices data");
+//		return;
+//	}
+//
+//	modelIndicesNum = objIndices.size();
+//	//Vertex buffer
+//	auto bufferSize = sizeof(objVertices[0]) * objVertices.size();
+//	createBuffer(bufferSize, VK_BUFFER_USAGE_VERTEX_BUFFER_BIT, VK_MEMORY_PROPERTY_HOST_COHERENT_BIT |
+//		VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT, vertexBuffer, vertexBufferMem);
+//
+//	//load data
+//	void* data;
+//	vkMapMemory(logicalDevice, vertexBufferMem, 0, bufferSize, 0, &data);
+//	memcpy(data, objVertices.data(), bufferSize);
+//	vkUnmapMemory(logicalDevice, vertexBufferMem);
+//
+//	bufferSize = sizeof(uint16_t) * objIndices.size();
+//	createBuffer(bufferSize, VK_BUFFER_USAGE_INDEX_BUFFER_BIT, VK_MEMORY_PROPERTY_HOST_COHERENT_BIT |
+//		VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT, indiceBuffer, indiceBufferMem);
+//
+//	vkMapMemory(logicalDevice, indiceBufferMem, 0, bufferSize, 0, &data);
+//	memcpy(data, objIndices.data(), bufferSize);
+//	vkUnmapMemory(logicalDevice, indiceBufferMem);
+//
+//	if (tempVertexBuffer != VK_NULL_HANDLE)
+//	{
+//		vkDestroyBuffer(logicalDevice, tempVertexBuffer, nullptr);
+//		vkDestroyBuffer(logicalDevice, tempIndiceBuffer, nullptr);
+//		vkFreeMemory(logicalDevice, tempVertexBufferMem, nullptr);
+//		vkFreeMemory(logicalDevice, tempIndiceBufferMem, nullptr);
+//	}
+//
+//	return;
+//}
 
+//************************IIMGUI********************************//
 void Triangle::createUICommandBuffers() {
 	uiCommandBuffers.resize(MAX_FRAMES_IN_FLIGHT);
 
@@ -1571,7 +1683,17 @@ void Triangle::drawUI() {
 	ImGui::Text("counter = %d", counter);
 
 	ImGui::Text("Application average %.3f ms/frame (%.1f FPS)", 1000.0f / ImGui::GetIO().Framerate, ImGui::GetIO().Framerate);
+
+	//show file info
+
+	for (int i = 0; i < filePaths.size(); ++i)
+	{
+		ImGui::Text("%s", filePaths[i].c_str());
+
+	}
+
 	ImGui::End();
 
 	ImGui::Render();
 }
+
