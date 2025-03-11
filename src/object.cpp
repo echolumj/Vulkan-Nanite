@@ -21,15 +21,15 @@ Object::Object(std::string name)
 		throw std::runtime_error(warn + err);
 	}
 
-	std::unordered_map<obj::Vertex, uint16_t> uniqueVertices{};
+	std::unordered_map<base::Vertex, uint16_t> uniqueVertices{};
 	for (const auto& shape : shapes) {
 		for (const auto& index : shape.mesh.indices) {
-			obj::Vertex vertex{};
+			base::Vertex vertex{};
 
 			vertex.pos = {
 				attrib.vertices[3 * index.vertex_index + 0],
 				attrib.vertices[3 * index.vertex_index + 1],
-				attrib.vertices[3 * index.vertex_index + 2]
+				attrib.vertices[3 * index.vertex_index + 2],
 			};
 			if (attrib.normals.size() >  0)
 			{

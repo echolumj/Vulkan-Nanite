@@ -89,7 +89,7 @@ void GLTFModel::loadMaterials(tinygltf::Model& input)
 	}
 }
 
-void GLTFModel::loadglTFFile(std::string filePath, std::vector<uint32_t> &indices, std::vector<gltf::Vertex> &vertices)
+void GLTFModel::loadglTFFile(std::string filePath, std::vector<uint32_t> &indices, std::vector<base::Vertex> &vertices)
 {
 	tinygltf::Model glTFInput;
 	tinygltf::TinyGLTF gltfContext;
@@ -114,7 +114,7 @@ void GLTFModel::loadglTFFile(std::string filePath, std::vector<uint32_t> &indice
 
 }
 
-void GLTFModel::loadNode(const tinygltf::Node& inputNode, const tinygltf::Model& input, GLTFModel::Node* parent, std::vector<uint32_t>& indices, std::vector<Vertex>& vertices)
+void GLTFModel::loadNode(const tinygltf::Node& inputNode, const tinygltf::Model& input, GLTFModel::Node* parent, std::vector<uint32_t>& indices, std::vector<base::Vertex>& vertices)
 {
 	GLTFModel::Node* node = new GLTFModel::Node{};
 	node->matrix = glm::mat4(1.0f);
@@ -183,11 +183,11 @@ void GLTFModel::loadNode(const tinygltf::Node& inputNode, const tinygltf::Model&
 
 				// Append data to model's vertex buffer
 				for (size_t v = 0; v < vertexCount; v++) {
-					gltf::Vertex vert{};
-					vert.pos = glm::vec4(glm::make_vec3(&positionBuffer[v * 3]), 1.0f);
-					vert.normal = glm::vec4(glm::normalize(glm::vec3(normalsBuffer ? glm::make_vec3(&normalsBuffer[v * 3]) : glm::vec3(0.0f))), 0.0);
+					base::Vertex vert{};
+					vert.pos = glm::vec3(glm::make_vec3(&positionBuffer[v * 3]));
+					vert.normal = glm::vec3(glm::normalize(glm::vec3(normalsBuffer ? glm::make_vec3(&normalsBuffer[v * 3]) : glm::vec3(0.0f))));
 					//vert.uv = texCoordsBuffer ? glm::make_vec2(&texCoordsBuffer[v * 2]) : glm::vec3(0.0f);
-					//vert.color = glm::vec3(1.0f);
+					vert.color = glm::vec3(1.0f);
 					vertices.push_back(vert);
 				}
 			}

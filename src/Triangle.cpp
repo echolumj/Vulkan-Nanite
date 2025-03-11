@@ -6,6 +6,8 @@
 #include <ctime>
 #include <array>
 
+//#include "Gizmo/imoguizmo.hpp"
+
 #ifdef NDEBUG
 const bool enableValidationLayers = false;
 #else
@@ -1161,7 +1163,7 @@ void Triangle::recordCommandBuffer(VkCommandBuffer commandBuffer, uint32_t image
 			//vertexBuffers[i] = ;
 			vkCmdBindVertexBuffers(commandBuffer, 0, 1, &(model.vertex.buffer), offsets);
 
-			vkCmdBindIndexBuffer(commandBuffer, model.indice.buffer, 0, VK_INDEX_TYPE_UINT16);
+			vkCmdBindIndexBuffer(commandBuffer, model.indice.buffer, 0, VK_INDEX_TYPE_UINT32);
 			vkCmdDrawIndexed(commandBuffer, model.indice.count, 1, 0, 0, 0);
 		}
 		
@@ -1691,6 +1693,13 @@ void Triangle::drawUI() {
 		ImGui::Text("%s", filePaths[i].c_str());
 
 	}
+
+	//ImOGuizmo::SetRect(10.0f /* x */, 600 /* y */, 120.0f /* square size */);
+	//ImOGuizmo::BeginFrame();
+
+	//auto viewMat = glm::lookAt(glm::vec3(1, 1, 0), glm::vec3(0, 1, 0), glm::vec3(1, 0, 0));
+	//auto projMat = glm::perspective(static_cast<float>(glm::radians(60.0)), 0.5f, 0.01f, 100.0f);
+	//ImOGuizmo::DrawGizmo(glm::value_ptr(viewMat), glm::value_ptr(projMat), 0.0 /* optional: default = 0.0f */);
 
 	ImGui::End();
 

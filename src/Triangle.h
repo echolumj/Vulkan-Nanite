@@ -26,8 +26,8 @@
 #include "imgui/imgui_impl_vulkan.h"
 
 //the size of window
-#define   WIDTH   800
-#define   HEIGHT   600 
+#define   WIDTH   1400
+#define   HEIGHT   1000 
 
 const int PARTICLE_NUM = 2000;
 const int MAX_FRAMES_IN_FLIGHT = 2;

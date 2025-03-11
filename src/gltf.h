@@ -1,22 +1,11 @@
 #pragma once
 
-#include <glm/glm.hpp>
-#include <glm/gtc/matrix_transform.hpp>
-#include <glm/gtc/type_ptr.hpp>
-
+#include "base.h"
 #include <tinygltf/tiny_gltf.h>
 
 #include <iostream>
 
 namespace gltf {
-
-// The vertex layout for the samples' model
-struct Vertex {
-	glm::vec4 pos;
-	glm::vec3 normal;
-	//glm::vec2 uv;
-	glm::vec3 color;
-};
 
 class GLTFModel
 {
@@ -75,12 +64,12 @@ public:
 
 	~GLTFModel();
 
-	void loadglTFFile(std::string filePath, std::vector<uint32_t>& indices, std::vector<gltf::Vertex>& vertices);
+	void loadglTFFile(std::string filePath, std::vector<uint32_t>& indices, std::vector<base::Vertex>& vertices);
 
 	void loadImages(tinygltf::Model& input);
 	void loadTextures(tinygltf::Model& input);
 	void loadMaterials(tinygltf::Model& input);
-	void loadNode(const tinygltf::Node& inputNode, const tinygltf::Model& input, GLTFModel::Node* parent, std::vector<uint32_t>& indexBuffer, std::vector<Vertex>& vertexBuffer);
+	void loadNode(const tinygltf::Node& inputNode, const tinygltf::Model& input, GLTFModel::Node* parent, std::vector<uint32_t>& indexBuffer, std::vector<base::Vertex>& vertexBuffer);
 	//// Draw a single node including child nodes (if present)
 	//void drawNode(VkCommandBuffer commandBuffer, VkPipelineLayout pipelineLayout, VulkanglTFModel::Node* node);
 	//

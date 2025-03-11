@@ -1,10 +1,9 @@
 #pragma once
 #include "vulkanInit.h"
+#include "base.h"
 
 #include <iostream>
 #include <vector>
-
-#include "object.h"
 
 namespace scene {
 
@@ -57,6 +56,6 @@ private:
 	VkDevice _logicalDevice;
 	VkQueue _queue;
 
-	void vertexAndIndiceBuffer_create(Model &model, std::vector<obj::Vertex> &vertices, std::vector<uint32_t> &indices);
+	void vertexAndIndiceBuffer_create(Model &model, std::vector<base::Vertex> &vertices, std::vector<uint32_t> &indices);
 };
 }

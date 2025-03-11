@@ -53,7 +53,7 @@ uint16_t SceneManager::addModel(std::string name)
 	if (fileType.compare(".obj") == 0)
 	{
 		std::vector<uint32_t> indices;
-		std::vector<obj::Vertex> vertices;
+		std::vector<base::Vertex> vertices;
 
 		obj::Object *objFile = new obj::Object(name);
 		indices = objFile->getIndices();
@@ -65,12 +65,17 @@ uint16_t SceneManager::addModel(std::string name)
 
 		return _models.size()-1;
 	}
-	else
+	else if(fileType.compare(".gltf") == 0)
 	{
 		std::vector<uint32_t> indices;
-		std::vector<gltf::Vertex> vertices;
+		std::vector<base::Vertex> vertices;
 		gltf::GLTFModel* gltfFile = new gltf::GLTFModel();
 		gltfFile->loadglTFFile(name,  indices, vertices);
+
+		vertexAndIndiceBuffer_create(model, vertices, indices);
+		_models.push_back(model);
+
+		return _models.size() - 1;
 	}
 
 	return -1;
@@ -85,7 +90,7 @@ Model SceneManager::getModel(uint16_t id) const
 }
 
 //************************Module Input**************************//
-void SceneManager::vertexAndIndiceBuffer_create(Model &model, std::vector<obj::Vertex> &vertices, std::vector<uint32_t> &indices)
+void SceneManager::vertexAndIndiceBuffer_create(Model &model, std::vector<base::Vertex> &vertices, std::vector<uint32_t> &indices)
 {
 	if (vertices.size() == 0 || indices.size() == 0)
 	{
