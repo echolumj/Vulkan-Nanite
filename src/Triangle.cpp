@@ -6,7 +6,8 @@
 #include <ctime>
 #include <array>
 
-//#include "Gizmo/imoguizmo.hpp"
+#define IMOGUIZMO_LEFT_HANDED
+#include "Gizmo/imoguizmo.hpp"
 
 #ifdef NDEBUG
 const bool enableValidationLayers = false;
@@ -52,6 +53,43 @@ static void framebufferResizeCallback(GLFWwindow * window, int width, int height
 	app->framebufferResized = true;
 }
 
+
+//interact info / mouse
+	// 鼠标状态变量
+bool isLeftMousePressed = false, isRightMousePressed = false, isScroll = false;
+double lastMouseX = 0.0, lastMouseY = 0.0, transzOffset = 0.0;
+
+
+static void MouseButtonCallback(GLFWwindow* window, int button, int action, int mods) {
+	if (button == GLFW_MOUSE_BUTTON_LEFT) {
+		if (action == GLFW_PRESS) {
+			isLeftMousePressed = true;
+			glfwGetCursorPos(window, &lastMouseX, &lastMouseY); // 记录按下时的鼠标位置
+		}
+		else if (action == GLFW_RELEASE) {
+			isLeftMousePressed = false;
+
+		}
+	}
+	else if (button == GLFW_MOUSE_BUTTON_RIGHT)
+	{
+		if (action == GLFW_PRESS) {
+			isRightMousePressed = true;
+			glfwGetCursorPos(window, &lastMouseX, &lastMouseY); // 记录按下时的鼠标位置
+		}
+		else if (action == GLFW_RELEASE) {
+			isRightMousePressed = false;
+
+		}
+	}
+}
+
+
+static void ScrollCallback(GLFWwindow* window, double xoffset, double yoffset)
+{
+	transzOffset = yoffset;
+	isScroll = true;
+}
 
 // read spv file code
 static std::vector<char> readFile(const std::string& filename)
@@ -126,6 +164,8 @@ void Triangle::window_init(void)
 	}
 	glfwSetWindowUserPointer(window, this);
 	glfwSetFramebufferSizeCallback(window, framebufferResizeCallback);
+	glfwSetMouseButtonCallback(window, MouseButtonCallback);
+	glfwSetScrollCallback(window, ScrollCallback);
 	glfwSetDropCallback(window, dropCallback);
 }
 
@@ -148,6 +188,7 @@ void Triangle::vulkan_init(void)
 	//vertexAndIndiceBuffer_create();
 	_sceneManager = new scene::SceneManager(physicalDevice, logicalDevice);
 
+	ubo.model = glm::mat4(1.0);
 	
 	graphicsPipline_create();
 	framebuffer_create();
@@ -206,6 +247,9 @@ void Triangle::main_loop(void)
 	while (!glfwWindowShouldClose(window))
 	{
 		glfwPollEvents();
+		if(isLeftMousePressed || isRightMousePressed || isScroll)
+			sceneInteract();
+
 		drawUI();
 
 		if (filePaths.size() > 0)
@@ -386,9 +430,7 @@ void Triangle::clean_up(void)
 	vkFreeMemory(logicalDevice, indiceBufferMem, nullptr);*/
 
 	if (_sceneManager)
-	{
 		delete _sceneManager;
-	}
 
 	vkDestroyCommandPool(logicalDevice, commandPool, nullptr);
 		
@@ -993,12 +1035,19 @@ void Triangle::graphicsPipline_create(void)
 	dynamicState.dynamicStateCount = 2;
 	dynamicState.pDynamicStates = dynamicStates;
 
+
+	//pushconstant 
+	VkPushConstantRange pushConstant = {};
+	pushConstant.offset = 0;
+	pushConstant.size = sizeof(base::UniformBufferObject);
+	pushConstant.stageFlags = VK_SHADER_STAGE_VERTEX_BIT;
+
 	//step 9:Pipeline layout 
 	VkPipelineLayoutCreateInfo pipelineLayoutInfo{};
 	pipelineLayoutInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
 	pipelineLayoutInfo.setLayoutCount = 0;
-	pipelineLayoutInfo.pushConstantRangeCount = 0;
-
+	pipelineLayoutInfo.pushConstantRangeCount = 1;
+	pipelineLayoutInfo.pPushConstantRanges = &pushConstant;
 	         
 	if (vkCreatePipelineLayout(logicalDevice, &pipelineLayoutInfo, NULL, &pipelineLayout) != VK_SUCCESS)
 	{
@@ -1113,6 +1162,19 @@ void Triangle::recordCommandBuffer(VkCommandBuffer commandBuffer, uint32_t image
 
 	//The render pass commands will be embedded in the primary command buffer itself and no secondary command buffers will be executed.
 	vkCmdBeginRenderPass(commandBuffer, &renderPassInfo, VK_SUBPASS_CONTENTS_INLINE);
+
+	glm::vec3 cameraPos = glm::vec3(0.0f, 0.0f, 10.0f);
+	glm::vec3 focusPos = glm::vec3(0.0f, 0.0f, 0.0f);
+	glm::vec3 front = focusPos - cameraPos;
+	glm::vec3 up = glm::vec3(0.0f, 1.0f, 0.0f);
+	glm::vec3 left = glm::cross(up, front);
+
+	//base::UniformBufferObject ubo;
+	ubo.model = _sceneManager->getModelMatrix();
+	ubo.projection = _sceneManager->getProjMatrix(WIDTH, HEIGHT);
+	ubo.view = _sceneManager->getViewMatrix();
+
+	vkCmdPushConstants(commandBuffer, pipelineLayout, VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(ubo), &ubo);
 
 	//The second parameter specifies if the pipeline object is a graphics or compute pipeline. 
 	vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, graphicsPipeline);
@@ -1694,15 +1756,53 @@ void Triangle::drawUI() {
 
 	}
 
-	//ImOGuizmo::SetRect(10.0f /* x */, 600 /* y */, 120.0f /* square size */);
-	//ImOGuizmo::BeginFrame();
+	ImOGuizmo::SetRect(50.0f /* x */, HEIGHT - 130.0f /* y */, 80.0f /* square size */);
+	ImOGuizmo::BeginFrame();
+
+	auto matrix = ubo.view * ubo.model;
+	ImOGuizmo::DrawGizmo(glm::value_ptr(matrix), glm::value_ptr(ubo.projection), 0.0 /* optional: default = 0.0f */);
 
 	//auto viewMat = glm::lookAt(glm::vec3(1, 1, 0), glm::vec3(0, 1, 0), glm::vec3(1, 0, 0));
 	//auto projMat = glm::perspective(static_cast<float>(glm::radians(60.0)), 0.5f, 0.01f, 100.0f);
-	//ImOGuizmo::DrawGizmo(glm::value_ptr(viewMat), glm::value_ptr(projMat), 0.0 /* optional: default = 0.0f */);
 
 	ImGui::End();
 
 	ImGui::Render();
 }
 
+
+void Triangle::sceneInteract(void)
+{
+	glm::vec3 rotationAngles(0.0f);
+	glm::vec3 translate(0.0f);
+
+	double currentMouseX, currentMouseY;
+	glfwGetCursorPos(window, &currentMouseX, &currentMouseY);
+
+	// 计算鼠标移动的偏移量
+	double deltaX = currentMouseX - lastMouseX;
+	double deltaY = currentMouseY - lastMouseY;
+
+	// 更新鼠标位置
+	lastMouseX = currentMouseX;
+	lastMouseY = currentMouseY;
+
+	if (isLeftMousePressed)
+	{
+		// 根据偏移量更新旋转角度
+		rotationAngles.y = static_cast<float>(deltaX) * 0.01f; // 绕Y轴旋转
+		rotationAngles.x = static_cast<float>(deltaY) * 0.01f; // 绕X轴旋转
+	}
+	else if(isRightMousePressed)
+	{
+		translate = glm::vec3(static_cast<float>(deltaX) * 0.01f, static_cast<float>(deltaY) * 0.01f, 0.0);
+		transzOffset = 0.0f;
+	}
+	else if (isScroll)
+	{
+		translate.z = -transzOffset;
+		isScroll = false;
+	}
+
+	_sceneManager->setModelMatrix(rotationAngles, translate);
+}

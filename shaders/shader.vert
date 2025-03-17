@@ -7,7 +7,15 @@ layout(location = 2) in vec3 inColor;
 
 layout(location = 0) out vec3 fragColor;
 
+layout ( push_constant ) uniform UBO 
+{
+	mat4 proj;
+	mat4 model;
+	mat4 view;
+} ubo;
+
+
 void main() {
-	gl_Position = vec4(inPosition, 1.0);
+	gl_Position = ubo.proj * ubo.view * ubo.model * vec4(inPosition, 1.0);
 	fragColor = (inNormal + (4, 4, 4)) / 4.0;
 }

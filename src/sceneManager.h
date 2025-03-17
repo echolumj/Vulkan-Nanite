@@ -1,6 +1,7 @@
 #pragma once
 #include "vulkanInit.h"
 #include "base.h"
+#include "camera.h"
 
 #include <iostream>
 #include <vector>
@@ -45,11 +46,18 @@ public:
 	uint16_t addModel(std::string name);
 	Model getModel(uint16_t id) const;
 	uint16_t getModelSize(void) { return _models.size(); }
+	
+	//camera
+	glm::mat4 getModelMatrix(void);
+	glm::mat4 getProjMatrix(int width, int height);
+	glm::mat4 getViewMatrix(void);
 
+	void setModelMatrix(glm::vec3& rotate, glm::vec3& translate);
 
 private:
 
 	std::vector<Model> _models;
+	scene::Camera* _camera = nullptr;
 
 	// The class requires some Vulkan objects so it can create it's own resources
 	VkPhysicalDevice _physicalDevice;

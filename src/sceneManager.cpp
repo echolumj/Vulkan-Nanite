@@ -24,6 +24,7 @@ using namespace scene;
 SceneManager::SceneManager(VkPhysicalDevice physicalDevice, VkDevice &logicDevice):_physicalDevice(physicalDevice), _logicalDevice(logicDevice)
 {
 	//support 
+	_camera = new Camera();
 
 }
 
@@ -37,6 +38,8 @@ SceneManager::~SceneManager()
 		vkDestroyBuffer(_logicalDevice, model.indice.buffer, nullptr);
 		vkFreeMemory(_logicalDevice, model.indice.memory, nullptr);
 	}
+
+	delete _camera;
 }
 
 uint16_t SceneManager::addModel(std::string name)
@@ -119,4 +122,29 @@ void SceneManager::vertexAndIndiceBuffer_create(Model &model, std::vector<base::
 	vkUnmapMemory(_logicalDevice, model.indice.memory);
 
 	return;
+}
+
+/*******************Camera********************/
+glm::mat4 SceneManager::getModelMatrix()
+{
+	assert(_camera != nullptr);
+	return _camera->getModelMatrix();
+}
+
+glm::mat4 SceneManager::getProjMatrix(int width, int height)
+{
+	assert(_camera != nullptr);
+	return _camera->getProjMatrix(width, height);
+}
+
+glm::mat4 SceneManager::getViewMatrix()
+{
+	assert(_camera != nullptr);
+	return _camera->getViewMatrix();
+}
+
+void SceneManager::setModelMatrix(glm::vec3& rotate, glm::vec3& translate)
+{
+	assert(_camera != nullptr);
+	_camera->setModelMatrix(rotate, translate);
 }

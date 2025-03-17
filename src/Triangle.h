@@ -22,7 +22,6 @@
 
 #include "imgui/imgui.h"
 #include "imgui/imgui_impl_glfw.h"
-
 #include "imgui/imgui_impl_vulkan.h"
 
 //the size of window
@@ -154,6 +153,8 @@ private:
 	void cleanupUIResources(void);
 	void drawUI(void);
 
+	void sceneInteract(void);
+
 	//uint32_t findMemoryType(uint32_t typeFilter, VkMemoryPropertyFlags properties);
 	//void createBuffer(VkDeviceSize size, VkBufferUsageFlags usage, VkMemoryPropertyFlags properties, VkBuffer& buffer, VkDeviceMemory& bufferMemory);
 	void copyBuffer(VkBuffer srcBuffer, VkBuffer dstBuffer, VkDeviceSize size);
@@ -231,6 +232,9 @@ private:
 	std::vector <VkEvent> event;
 
 	scene::SceneManager* _sceneManager;
+	
 	uint16_t curModelId = -1;
+
+	base::UniformBufferObject ubo;
 };
 
