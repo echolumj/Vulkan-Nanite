@@ -4,47 +4,12 @@
 #define GLFW_EXPOSE_NATIVE_WIN32
 //#include <Windows.h>
 
-#include <GLFW/glfw3.h>
-#include <GLFW/glfw3native.h>
-
 #include "sceneManager.h"
-//#include <vulkan/vulkan.h>
+#include "ui.h"
 #include <vulkan/vulkan_win32.h>
-
-//#include <iostream>
-//#include <vector>
 #include <array>
-#include <optional>
-
-//#include <glm/glm.hpp>
-//#include <glm/gtc/matrix_transform.hpp>
-//#include <glm/gtc/type_ptr.hpp>
-
-#include "imgui/imgui.h"
-#include "imgui/imgui_impl_glfw.h"
-#include "imgui/imgui_impl_vulkan.h"
-
-//the size of window
-#define   WIDTH   1400
-#define   HEIGHT   1000 
 
 const int PARTICLE_NUM = 2000;
-const int MAX_FRAMES_IN_FLIGHT = 2;
-
-typedef glm::vec2 vec2;
-typedef glm::vec3 vec3;
-typedef glm::vec4 vec4;
-
-namespace compute
-{
-	struct Particle{
-		vec2 position;
-		vec2 velocity;
-		vec4 color;
-	};
-
-}
-
 
 namespace triangle
 {
@@ -84,18 +49,6 @@ namespace triangle
 		}
 	};
 
-	//index of queue family
-	struct QueueFamilyIndices {
-		std::optional<uint32_t> graphicsFamily;//物理设备对应的队列族
-		std::optional<uint32_t> presentFamily;
-		std::optional<uint32_t> graphicAndComputeFamily;
-
-		bool isComplete() {
-			return graphicAndComputeFamily.has_value() && presentFamily.has_value();
-		}
-
-	};
-
 	//basic info of swap chain creation
 	struct SwapChainSupportDetails {
 		VkSurfaceCapabilitiesKHR capabilities;
@@ -118,18 +71,10 @@ public:
 private:
 	void window_init(void);
 	void vulkan_init(void);
-	void ui_init(void);
 	void main_loop(void);
 	void clean_up(void);
 
 	void drawFrame(void);
-
-	void createUICommandBuffers(void);
-	void recordUICommands(VkCommandBuffer commandBuffer, uint32_t imageIndex, uint32_t curFrame);
-	void createUICommandPool(VkCommandPool* cmdPool, VkCommandPoolCreateFlags flags);
-	void createUIDescriptorPool(void);
-	void createUIFramebuffers(void);
-	void createUIRenderPass(void);
 	
 	void instance_create(void);
 	void debugMessenger_setUp(void);
@@ -150,31 +95,18 @@ private:
 
 	void recordCommandBuffer(VkCommandBuffer commandBuffer, uint32_t imageIndex, uint32_t curFrame);
 	void cleanupSwapChain(void);
-	void cleanupUIResources(void);
-	void drawUI(void);
-
 	void sceneInteract(void);
-
-	//uint32_t findMemoryType(uint32_t typeFilter, VkMemoryPropertyFlags properties);
-	//void createBuffer(VkDeviceSize size, VkBufferUsageFlags usage, VkMemoryPropertyFlags properties, VkBuffer& buffer, VkDeviceMemory& bufferMemory);
-	void copyBuffer(VkBuffer srcBuffer, VkBuffer dstBuffer, VkDeviceSize size);
-
-	VkCommandBuffer beginSingleTimeCommands(VkCommandPool cmdPool);
-	void endSingleTimeCommands(VkCommandBuffer commandBuffer, VkCommandPool cmdPool);
 
 	//////////////////////Auxiliary function///////////////////////////////////
 	std::vector<const char*> getRequiredExtensions(void);
 	bool CheckValidationLayerSupport(void);
 	bool CheckDeviceExtensionSupport(VkPhysicalDevice devices);
 	bool isDeviceSuitable(VkPhysicalDevice device);
-	QueueFamilyIndices findQueueFamilies(VkPhysicalDevice devices);
 	SwapChainSupportDetails querySwapChainSupport(VkPhysicalDevice device);
 
 	VkSurfaceFormatKHR chooseSwapSurfaceFormat(const std::vector<VkSurfaceFormatKHR>& formats);
 	VkPresentModeKHR chooseSwapPresentMode(const std::vector<VkPresentModeKHR>& presentModes);
 	VkExtent2D chooseSwapExtent(const VkSurfaceCapabilitiesKHR& capabilities);//获取最新的窗口大小
-
-	VkShaderModule createShaderModule(const std::vector<char>& code);
 
 	VkResult CreateDebugUtilsMessengerEXT(VkInstance instance, const VkDebugUtilsMessengerCreateInfoEXT* pCreateInfo, const VkAllocationCallbacks* pAllocator, VkDebugUtilsMessengerEXT* pDebugMessenger);
 	void DestoryDebugUtilsMessengerEXT(VkInstance instance, const VkDebugUtilsMessengerEXT debugMessenger, const VkAllocationCallbacks* pAllocator);
@@ -212,29 +144,20 @@ private:
 	VkQueue computeQueue;
 
 	//GPU-GPU Synchronization
-	//VkSemaphore imageAvailableSemaphore;
-	//VkSemaphore renderFinishedSemaphore;
 	std::vector<VkSemaphore> imageAvailableSemaphores;
 	std::vector<VkSemaphore> renderFinishedSemaphores;
 	//CPU-GPU Synchronization
 	std::vector<VkFence> inFlightFences;
 	std::vector<VkFence> imagesInFlight; //image count
-	size_t currentFrame;
-
-	//imgui UI
-	VkDescriptorPool uiDescriptorPool;
-	std::vector<VkFramebuffer> uiFramebuffers;
-	VkRenderPass uiRenderPass;
-	VkCommandPool uiCommandPool;
-	std::vector<VkCommandBuffer> uiCommandBuffers;
-
-	uint32_t imageCount;
 	std::vector <VkEvent> event;
 
+	size_t currentFrame;
+	uint32_t imageCount;
+
 	scene::SceneManager* _sceneManager;
+	UI* _ui;
 	
 	uint16_t curModelId = -1;
-
 	base::UniformBufferObject ubo;
 };
 

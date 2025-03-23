@@ -6,9 +6,6 @@
 #include <ctime>
 #include <array>
 
-#define IMOGUIZMO_LEFT_HANDED
-#include "Gizmo/imoguizmo.hpp"
-
 #ifdef NDEBUG
 const bool enableValidationLayers = false;
 #else
@@ -126,7 +123,11 @@ void Triangle::run(void)
 {
 	window_init();
 	vulkan_init();
-	ui_init();
+	
+	//UI
+	_ui = new UI(physicalDevice, logicalDevice, surface, swapChainImageFormat, swapChainExtent);
+	_ui->init(window, instance, graphicsQueue, swapChainImageViews);
+
 	main_loop();
 	clean_up();
 }
@@ -195,52 +196,6 @@ void Triangle::vulkan_init(void)
 	syncObjects_create();
 }
 
-void Triangle::ui_init(void)
-{
-	IMGUI_CHECKVERSION();
-	ImGui::CreateContext();
-	ImGui::StyleColorsDark();
-	//ImGui::StyleColorsClassic();
-
-	// Initialize some DearImgui specific resources
-	createUIDescriptorPool();
-	createUIRenderPass();
-	createUICommandPool(&uiCommandPool, VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT);
-	createUICommandBuffers();
-	createUIFramebuffers();
-
-	QueueFamilyIndices indice = findQueueFamilies(physicalDevice);
-
-	// Provide bind points from Vulkan API
-	ImGui_ImplGlfw_InitForVulkan(window, true);
-	ImGui_ImplVulkan_InitInfo init_info = {};
-	init_info.Instance = instance;
-	init_info.PhysicalDevice = physicalDevice;
-	init_info.Device = logicalDevice;
-	init_info.QueueFamily = indice.graphicsFamily.value();
-	init_info.Queue = graphicsQueue;
-	init_info.DescriptorPool = uiDescriptorPool;
-	init_info.MinImageCount = imageCount;
-	init_info.ImageCount = imageCount;
-	ImGui_ImplVulkan_Init(&init_info, uiRenderPass);
-
-	// Upload the fonts for DearImgui
-	VkCommandBuffer commandBuffer = beginSingleTimeCommands(uiCommandPool);
-	ImGui_ImplVulkan_CreateFontsTexture(commandBuffer);
-	endSingleTimeCommands(commandBuffer, uiCommandPool);
-	ImGui_ImplVulkan_DestroyFontUploadObjects();
-
-	// 在 ImGui 初始化时加载字体
-	//ImGuiIO& io = ImGui::GetIO();
-	//io.Fonts->AddFontDefault();
-	//io.Fonts->AddFontFromFileTTF("c:\\Windows\\Fonts\\LBRITE.TTF", 13.0f, nullptr, io.Fonts->GetGlyphRangesChineseFull());
-	//io.Fonts->AddFontFromFileTTF("C:/Windows/Fonts/calibril.ttf", 13.0, nullptr, io.Fonts->GetGlyphRangesDefault());
-
-	//io.Fonts->AddFontFromFileTTF("C:/Windows/Fonts/arial.ttf", 13.0f, nullptr, io.Fonts->GetGlyphRangesChineseFull());
-
-	//// 重要：重建字体纹理
-	//io.Fonts->Build();
-}
 
 void Triangle::main_loop(void)
 {
@@ -250,7 +205,7 @@ void Triangle::main_loop(void)
 		if(isLeftMousePressed || isRightMousePressed || isScroll)
 			sceneInteract();
 
-		drawUI();
+		_ui->draw(ubo);
 
 		if (filePaths.size() > 0)
 		{
@@ -298,12 +253,11 @@ void Triangle::drawFrame(void)
 	//2.Submitting the command buffer
 	vkResetCommandBuffer(commandBuffers[currentFrame], 0);
 	recordCommandBuffer(commandBuffers[currentFrame], imageIndex, currentFrame);
-	vkResetCommandBuffer(uiCommandBuffers[currentFrame], 0);
-	recordUICommands(uiCommandBuffers[currentFrame], imageIndex, currentFrame);
+	_ui->recordUICommandBuffer(event[currentFrame], imageIndex, currentFrame);
 
 	std::vector<VkSemaphore> waitSemaphores{ imageAvailableSemaphores[currentFrame] };
 	VkPipelineStageFlags waitStages[] = { VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT };
-	std::array<VkCommandBuffer, 2> cmdBuffers = { commandBuffers[currentFrame], uiCommandBuffers[currentFrame] };
+	std::array<VkCommandBuffer, 2> cmdBuffers = { commandBuffers[currentFrame], _ui->getCommandBuffer(currentFrame)};
 	std::vector<VkSemaphore> signalSemaphores{ renderFinishedSemaphores[currentFrame] };
 
 	VkSubmitInfo submitInfo{};
@@ -366,7 +320,6 @@ void Triangle::swapCahin_recreate()
 
 	//part2:clean up old swap chain
 	cleanupSwapChain();
-	cleanupUIResources();
 
 	//part3:recreate swap chain
 	swapChain_create();
@@ -374,9 +327,8 @@ void Triangle::swapCahin_recreate()
 	framebuffer_create();
 
 	//imgui
-	ImGui_ImplVulkan_SetMinImageCount(imageCount);
-	createUICommandBuffers();
-	createUIFramebuffers();
+	_ui->cleanupUIResources();
+	_ui->recreateUISwapChain(imageCount, swapChainImageViews);
 }
 
 void Triangle::cleanupSwapChain(void)
@@ -402,20 +354,7 @@ void Triangle::clean_up(void)
 	//vkFreeCommandBuffers(logicalDevice, commandPool, commandBuffers.size(), commandBuffers.data());
 	cleanupSwapChain();
 
-	// Cleanup DearImGui
-	ImGui_ImplVulkan_Shutdown();
-	ImGui_ImplGlfw_Shutdown();
-	ImGui::DestroyContext();
-
-	vkDestroyDescriptorPool(logicalDevice, uiDescriptorPool, nullptr);
-	vkFreeCommandBuffers(logicalDevice, uiCommandPool, static_cast<uint32_t>(uiCommandBuffers.size()),
-		uiCommandBuffers.data());
-	vkDestroyCommandPool(logicalDevice, uiCommandPool, nullptr);
-	vkDestroyRenderPass(logicalDevice, uiRenderPass, nullptr);
-
-	for (auto framebuffer : uiFramebuffers) {
-		vkDestroyFramebuffer(logicalDevice, framebuffer, nullptr);
-	}
+	delete _ui;
 
 	for (size_t i = 0; i < MAX_FRAMES_IN_FLIGHT; i++)
 	{
@@ -559,52 +498,6 @@ void Triangle::surface_create(void)
 	//}
 	
 }
-
-QueueFamilyIndices Triangle::findQueueFamilies(VkPhysicalDevice devices)
-{
-	QueueFamilyIndices indice;
-
-	uint32_t queueFamilyCount;
-	vkGetPhysicalDeviceQueueFamilyProperties(devices, &queueFamilyCount, nullptr);
-	std::vector<VkQueueFamilyProperties> queueFamily(queueFamilyCount);
-	vkGetPhysicalDeviceQueueFamilyProperties(devices, &queueFamilyCount, queueFamily.data());
-
-	int index = 0;
-
-	for (const auto qfamily : queueFamily)
-	{	
-		if (qfamily.queueCount <= 0) continue;
-		//队列支持图形处理命令
-		if ((qfamily.queueFlags & VK_QUEUE_GRAPHICS_BIT) && (qfamily.queueFlags & VK_QUEUE_COMPUTE_BIT) && qfamily.queueCount > 0)
-		{
-			indice.graphicAndComputeFamily = index;
-			indice.graphicsFamily = index;
-		}
-
-		//判定队列族编号对应的队列族下的队列是否支持将图像呈现到窗口上
-		VkBool32 presentSupport = false;
-		vkGetPhysicalDeviceSurfaceSupportKHR(devices, index, surface, &presentSupport);
-
-		if (qfamily.queueCount > 0 && presentSupport)
-		{
-			indice.presentFamily = index;
-		}
-
-		if (indice.isComplete())
-		{
-			break;
-		}
-		index++;
-	}
-	//选择physical device时需要作为判定条件，不能强行终止程序
-	//if (!indice.isComplete())
-	//{
-	//	throw std::runtime_error("No suitable queue .");
-	//}
-
-	return indice;
-}
-
 bool Triangle::isDeviceSuitable(VkPhysicalDevice devices)
 {
 	//VkPhysicalDeviceProperties property;
@@ -616,7 +509,7 @@ bool Triangle::isDeviceSuitable(VkPhysicalDevice devices)
 	// 独显 + geometryShader
 	//return (property.deviceType == VK_PHYSICAL_DEVICE_TYPE_DISCRETE_GPU) && feature.geometryShader;
 
-	QueueFamilyIndices indice = findQueueFamilies(devices);
+	vk::QueueFamilyIndices indices = vk::VulkanInit::findQueueFamilies(devices, surface);
 
 	bool extensionSupport = CheckDeviceExtensionSupport(devices);//swapchain
 	bool swapChainAdequate = false;
@@ -627,7 +520,7 @@ bool Triangle::isDeviceSuitable(VkPhysicalDevice devices)
 		swapChainAdequate = !(swapChainDetails.formats.empty() || swapChainDetails.presentModes.empty());
 	}
 	
-	return indice.isComplete() && extensionSupport && swapChainAdequate;
+	return indices.isComplete() && extensionSupport && swapChainAdequate;
 }
 
 void Triangle::physicalDevice_pick(void)
@@ -688,7 +581,7 @@ void Triangle::physicalDevice_pick(void)
 
 void Triangle::logicalDevice_create(void)
 {
-	QueueFamilyIndices indice = findQueueFamilies(physicalDevice);
+	vk::QueueFamilyIndices indice = vk::VulkanInit::findQueueFamilies(physicalDevice, surface);
 
 	VkDeviceQueueCreateInfo queueCreateInfo{};
 	queueCreateInfo.sType = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO;
@@ -761,7 +654,7 @@ void Triangle::swapChain_create(void)
 	createInfo.imageArrayLayers = 1;//specifies the amount of layers each image consists of
 	createInfo.imageUsage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT;
 
-	QueueFamilyIndices indices = findQueueFamilies(physicalDevice);
+	vk::QueueFamilyIndices indices = vk::VulkanInit::findQueueFamilies(physicalDevice, surface);
 	uint32_t queueFamilyIndices[] = {indices.graphicsFamily.value(), indices.presentFamily.value()};
 
 	//图形渲染和image呈现在surface的队列族不一致：并发模式
@@ -830,22 +723,6 @@ void Triangle::imageView_create(void)
 	}
 }
 
-VkShaderModule Triangle::createShaderModule(const std::vector<char>& code)
-{
-	VkShaderModuleCreateInfo createInfo{};
-	createInfo.sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO;
-	createInfo.codeSize = code.size();
-	createInfo.pCode = reinterpret_cast<const uint32_t*>(code.data());
-
-	VkShaderModule shaderModule;
-	if (vkCreateShaderModule(logicalDevice, &createInfo, nullptr, &shaderModule) != VK_SUCCESS)
-	{
-		throw std::runtime_error("failed to create shader module .");
-	}
-
-	return shaderModule;
-}
-
 void Triangle::renderPass_create(void)
 {
 	//only one color buffer
@@ -893,49 +770,13 @@ void Triangle::renderPass_create(void)
 	}
 }
 
-void Triangle::copyBuffer(VkBuffer srcBuffer, VkBuffer dstBuffer, VkDeviceSize size) 
-{
-	VkCommandBufferAllocateInfo allocInfo{};
-	allocInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
-	allocInfo.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
-	allocInfo.commandPool = commandPool;
-	allocInfo.commandBufferCount = 1;
-
-	VkCommandBuffer commandBuffer;
-	vkAllocateCommandBuffers(logicalDevice, &allocInfo, &commandBuffer);
-
-	VkCommandBufferBeginInfo beginInfo{};
-	beginInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
-	beginInfo.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
-
-	vkBeginCommandBuffer(commandBuffer, &beginInfo);
-
-	VkBufferCopy copyRegion{};
-	copyRegion.srcOffset = 0; // Optional
-	copyRegion.dstOffset = 0; // Optional
-	copyRegion.size = size;
-	vkCmdCopyBuffer(commandBuffer, srcBuffer, dstBuffer, 1, &copyRegion);
-
-	vkEndCommandBuffer(commandBuffer);
-
-	VkSubmitInfo submitInfo{};
-	submitInfo.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
-	submitInfo.commandBufferCount = 1;
-	submitInfo.pCommandBuffers = &commandBuffer;
-
-	vkQueueSubmit(graphicsQueue, 1, &submitInfo, VK_NULL_HANDLE);
-	vkQueueWaitIdle(graphicsQueue);
-
-	vkFreeCommandBuffers(logicalDevice, commandPool, 1, &commandBuffer);
-}
-
 void Triangle::graphicsPipline_create(void)
 {
 	auto vertexShaderCode = readFile(RELATIVE_PATH + std::string("/spvs/vert.spv"));
 	auto fragShaderCode = readFile(RELATIVE_PATH + std::string("/spvs/frag.spv"));
 
-	VkShaderModule vertShaderModule = createShaderModule(vertexShaderCode);
-	VkShaderModule fragmentShaderModule = createShaderModule(fragShaderCode);
+	VkShaderModule vertShaderModule = vk::VulkanInit::createShaderModule(logicalDevice, vertexShaderCode);
+	VkShaderModule fragmentShaderModule = vk::VulkanInit::createShaderModule(logicalDevice, fragShaderCode);
 
 	VkPipelineShaderStageCreateInfo vertShaderStageInfo{};
 	vertShaderStageInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
@@ -1124,7 +965,7 @@ void Triangle::framebuffer_create(void)
 
 void Triangle::commandPool_create(void)
 {
-	QueueFamilyIndices queueFamilyIndices = findQueueFamilies(physicalDevice);
+	vk::QueueFamilyIndices queueFamilyIndices = vk::VulkanInit::findQueueFamilies(physicalDevice, surface);
 
 	VkCommandPoolCreateInfo poolCreateInfo{};
 	poolCreateInfo.sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO;
@@ -1447,329 +1288,6 @@ std::vector<const char*> Triangle::getRequiredExtensions(void)
 
 	return extensions;
 }
-////************************Module Input**************************//
-//void Triangle::vertexAndIndiceBuffer_create(std::vector<std::string> &paths)
-//{
-//	std::vector<obj::Vertex> objVertices;
-//	std::vector<uint16_t> objIndices;
-//
-//	VkBuffer tempVertexBuffer = VK_NULL_HANDLE;
-//	VkBuffer tempIndiceBuffer = VK_NULL_HANDLE;
-//	VkDeviceMemory tempVertexBufferMem = VK_NULL_HANDLE;
-//	VkDeviceMemory tempIndiceBufferMem = VK_NULL_HANDLE;
-//
-//	if (vertexBuffer != VK_NULL_HANDLE)
-//	{
-//		tempVertexBuffer = vertexBuffer;
-//		tempIndiceBuffer = indiceBuffer;
-//		tempVertexBufferMem = vertexBufferMem;
-//		tempIndiceBufferMem = indiceBufferMem;
-//	}
-//
-//	for (int i = 0; i < paths.size(); ++i)
-//	{
-//		Object* ob = new Object(paths[i].c_str());
-//		auto verticesIn = ob->getVertices();
-//		auto indices = ob->getIndices();
-//
-//		objVertices.insert(objVertices.end(), verticesIn.begin(), verticesIn.end());
-//		objIndices.insert(objIndices.end(), indices.begin(), indices.end());
-//
-//		delete ob;
-//	}
-//
-//	if (objVertices.size() == 0 || objIndices.size() == 0)
-//	{
-//		std::runtime_error("not have vertices or indices data");
-//		return;
-//	}
-//
-//	modelIndicesNum = objIndices.size();
-//	//Vertex buffer
-//	auto bufferSize = sizeof(objVertices[0]) * objVertices.size();
-//	createBuffer(bufferSize, VK_BUFFER_USAGE_VERTEX_BUFFER_BIT, VK_MEMORY_PROPERTY_HOST_COHERENT_BIT |
-//		VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT, vertexBuffer, vertexBufferMem);
-//
-//	//load data
-//	void* data;
-//	vkMapMemory(logicalDevice, vertexBufferMem, 0, bufferSize, 0, &data);
-//	memcpy(data, objVertices.data(), bufferSize);
-//	vkUnmapMemory(logicalDevice, vertexBufferMem);
-//
-//	bufferSize = sizeof(uint16_t) * objIndices.size();
-//	createBuffer(bufferSize, VK_BUFFER_USAGE_INDEX_BUFFER_BIT, VK_MEMORY_PROPERTY_HOST_COHERENT_BIT |
-//		VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT, indiceBuffer, indiceBufferMem);
-//
-//	vkMapMemory(logicalDevice, indiceBufferMem, 0, bufferSize, 0, &data);
-//	memcpy(data, objIndices.data(), bufferSize);
-//	vkUnmapMemory(logicalDevice, indiceBufferMem);
-//
-//	if (tempVertexBuffer != VK_NULL_HANDLE)
-//	{
-//		vkDestroyBuffer(logicalDevice, tempVertexBuffer, nullptr);
-//		vkDestroyBuffer(logicalDevice, tempIndiceBuffer, nullptr);
-//		vkFreeMemory(logicalDevice, tempVertexBufferMem, nullptr);
-//		vkFreeMemory(logicalDevice, tempIndiceBufferMem, nullptr);
-//	}
-//
-//	return;
-//}
-
-//************************IIMGUI********************************//
-void Triangle::createUICommandBuffers() {
-	uiCommandBuffers.resize(MAX_FRAMES_IN_FLIGHT);
-
-	VkCommandBufferAllocateInfo commandBufferAllocateInfo = {};
-	commandBufferAllocateInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
-	commandBufferAllocateInfo.commandPool = uiCommandPool;
-	commandBufferAllocateInfo.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
-	commandBufferAllocateInfo.commandBufferCount = static_cast<uint32_t>(uiCommandBuffers.size());
-
-	if (vkAllocateCommandBuffers(logicalDevice, &commandBufferAllocateInfo, uiCommandBuffers.data()) != VK_SUCCESS) {
-		throw std::runtime_error("Unable to allocate UI command buffers!");
-	}
-}
-
-void Triangle::recordUICommands(VkCommandBuffer commandBuffer, uint32_t imageIndex, uint32_t curFrame) {
-	VkCommandBufferBeginInfo cmdBufferBegin = {};
-	cmdBufferBegin.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
-	cmdBufferBegin.flags |= VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
-
-	if (vkBeginCommandBuffer(commandBuffer, &cmdBufferBegin) != VK_SUCCESS) {
-		throw std::runtime_error("Unable to start recording UI command buffer!");
-	}
-
-	VkClearValue clearColor = { 0.0f, 0.0f, 0.0f, 1.0f };
-	VkRenderPassBeginInfo renderPassBeginInfo = {};
-	renderPassBeginInfo.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
-	renderPassBeginInfo.renderPass = uiRenderPass;
-	renderPassBeginInfo.framebuffer = uiFramebuffers[imageIndex];
-	renderPassBeginInfo.renderArea.extent.width = swapChainExtent.width;
-	renderPassBeginInfo.renderArea.extent.height = swapChainExtent.height;
-	renderPassBeginInfo.clearValueCount = 1;
-	renderPassBeginInfo.pClearValues = &clearColor;
-
-	vkCmdBeginRenderPass(commandBuffer, &renderPassBeginInfo, VK_SUBPASS_CONTENTS_INLINE);
-
-	VkPipelineStageFlags srcStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
-	VkPipelineStageFlags dstStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
-
-	VkMemoryBarrier memoryBarrier = {};
-	memoryBarrier.sType = VK_STRUCTURE_TYPE_MEMORY_BARRIER;
-	memoryBarrier.srcAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
-	memoryBarrier.dstAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
-
-	vkCmdWaitEvents(commandBuffer, 1, &event[curFrame], srcStageMask, dstStageMask, 1, &memoryBarrier, 0, nullptr, 0, nullptr);
-
-	// Grab and record the draw data for Dear Imgui
-	ImGui_ImplVulkan_RenderDrawData(ImGui::GetDrawData(), commandBuffer);
-
-	// End and submit render pass
-	vkCmdEndRenderPass(commandBuffer);
-
-	if (vkEndCommandBuffer(commandBuffer) != VK_SUCCESS) {
-		throw std::runtime_error("Failed to record command buffers!");
-	}
-}
-
-void Triangle::createUICommandPool(VkCommandPool* cmdPool, VkCommandPoolCreateFlags flags) {
-
-	QueueFamilyIndices indice = findQueueFamilies(physicalDevice);
-
-	VkCommandPoolCreateInfo commandPoolCreateInfo = {};
-	commandPoolCreateInfo.sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO;
-	commandPoolCreateInfo.queueFamilyIndex = indice.graphicsFamily.value();
-	commandPoolCreateInfo.flags = flags;
-
-	if (vkCreateCommandPool(logicalDevice, &commandPoolCreateInfo, nullptr, cmdPool) != VK_SUCCESS) {
-		throw std::runtime_error("Could not create graphics command pool!");
-	}
-}
-
-// Copied this code from DearImgui's setup:
-// https://github.com/ocornut/imgui/blob/master/examples/example_glfw_vulkan/main.cpp
-void Triangle::createUIDescriptorPool() {
-	VkDescriptorPoolSize pool_sizes[] = {
-		{ VK_DESCRIPTOR_TYPE_SAMPLER, 1000 },
-		{ VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 1000 },
-		{ VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE, 1000 },
-		{ VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, 1000 },
-		{ VK_DESCRIPTOR_TYPE_UNIFORM_TEXEL_BUFFER, 1000 },
-		{ VK_DESCRIPTOR_TYPE_STORAGE_TEXEL_BUFFER, 1000 },
-		{ VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 1000 },
-		{ VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1000 },
-		{ VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC, 1000 },
-		{ VK_DESCRIPTOR_TYPE_STORAGE_BUFFER_DYNAMIC, 1000 },
-		{ VK_DESCRIPTOR_TYPE_INPUT_ATTACHMENT, 1000 }
-	};
-
-	VkDescriptorPoolCreateInfo pool_info = {};
-	pool_info.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
-	pool_info.flags = VK_DESCRIPTOR_POOL_CREATE_FREE_DESCRIPTOR_SET_BIT;
-	pool_info.maxSets = 1000 * IM_ARRAYSIZE(pool_sizes);
-	pool_info.poolSizeCount = static_cast<uint32_t>(IM_ARRAYSIZE(pool_sizes));
-	pool_info.pPoolSizes = pool_sizes;
-	if (vkCreateDescriptorPool(logicalDevice, &pool_info, nullptr, &uiDescriptorPool) != VK_SUCCESS) {
-		throw std::runtime_error("Cannot allocate UI descriptor pool!");
-	}
-}
-
-void Triangle::createUIFramebuffers() {
-	// Create some UI framebuffers. These will be used in the render pass for the UI
-	uiFramebuffers.resize(swapChainImages.size());
-	VkImageView attachment[1];
-	VkFramebufferCreateInfo info = {};
-	info.sType = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO;
-	info.renderPass = uiRenderPass;
-	info.attachmentCount = 1;
-	info.pAttachments = attachment;
-	info.width = swapChainExtent.width;
-	info.height = swapChainExtent.height;
-	info.layers = 1;
-	for (uint32_t i = 0; i < swapChainImages.size(); ++i) {
-		attachment[0] = swapChainImageViews[i];
-		if (vkCreateFramebuffer(logicalDevice, &info, nullptr, &uiFramebuffers[i]) != VK_SUCCESS) {
-			throw std::runtime_error("Unable to create UI framebuffers!");
-		}
-	}
-}
-
-void Triangle::createUIRenderPass() {
-	// Create an attachment description for the render pass
-	VkAttachmentDescription attachmentDescription = {};
-	attachmentDescription.format = swapChainImageFormat;
-	attachmentDescription.samples = VK_SAMPLE_COUNT_1_BIT;
-	attachmentDescription.loadOp = VK_ATTACHMENT_LOAD_OP_LOAD; // Need UI to be drawn on top of main
-	attachmentDescription.initialLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
-	attachmentDescription.finalLayout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR; // Last pass so we want to present after
-	attachmentDescription.storeOp = VK_ATTACHMENT_STORE_OP_STORE;
-	attachmentDescription.stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
-	attachmentDescription.stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
-
-	// Create a color attachment reference
-	VkAttachmentReference attachmentReference = {};
-	attachmentReference.attachment = 0;
-	attachmentReference.layout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
-
-	// Create a subpass
-	VkSubpassDescription subpass = {};
-	subpass.pipelineBindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS;
-	subpass.colorAttachmentCount = 1;
-	subpass.pColorAttachments = &attachmentReference;
-
-	// Create a subpass dependency to synchronize our main and UI render passes
-	// We want to render the UI after the geometry has been written to the framebuffer
-	// so we need to configure a subpass dependency as such
-	VkSubpassDependency subpassDependency = {};
-	subpassDependency.srcSubpass = VK_SUBPASS_EXTERNAL; // Create external dependency
-	subpassDependency.dstSubpass = 0; // The geometry subpass comes first
-	subpassDependency.srcStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
-	subpassDependency.dstStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
-	subpassDependency.srcAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT; // Wait on writes
-	subpassDependency.dstStageMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
-
-	// Finally create the UI render pass
-	VkRenderPassCreateInfo renderPassInfo = {};
-	renderPassInfo.sType = VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO;
-	renderPassInfo.attachmentCount = 1;
-	renderPassInfo.pAttachments = &attachmentDescription;
-	renderPassInfo.subpassCount = 1;
-	renderPassInfo.pSubpasses = &subpass;
-	renderPassInfo.dependencyCount = 1;
-	renderPassInfo.pDependencies = &subpassDependency;
-
-	if (vkCreateRenderPass(logicalDevice, &renderPassInfo, nullptr, &uiRenderPass) != VK_SUCCESS) {
-		throw std::runtime_error("Unable to create UI render pass!");
-	}
-}
-
-VkCommandBuffer Triangle::beginSingleTimeCommands(VkCommandPool cmdPool) {
-	VkCommandBufferAllocateInfo allocInfo = {};
-	allocInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
-	allocInfo.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
-	allocInfo.commandPool = cmdPool;
-	allocInfo.commandBufferCount = 1;
-
-	VkCommandBuffer commandBuffer = {};
-	vkAllocateCommandBuffers(logicalDevice, &allocInfo, &commandBuffer);
-
-	VkCommandBufferBeginInfo beginInfo = {};
-	beginInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
-	beginInfo.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
-
-	if (vkBeginCommandBuffer(commandBuffer, &beginInfo) != VK_SUCCESS) {
-		throw std::runtime_error("Could not create one-time command buffer!");
-	}
-
-	return commandBuffer;
-}
-
-void Triangle::endSingleTimeCommands(VkCommandBuffer commandBuffer, VkCommandPool cmdPool) {
-	vkEndCommandBuffer(commandBuffer);
-
-	VkSubmitInfo submitInfo{};
-	submitInfo.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
-	submitInfo.commandBufferCount = 1;
-	submitInfo.pCommandBuffers = &commandBuffer;
-
-	vkQueueSubmit(graphicsQueue, 1, &submitInfo, VK_NULL_HANDLE);
-	vkQueueWaitIdle(graphicsQueue);
-
-	vkFreeCommandBuffers(logicalDevice, cmdPool, 1, &commandBuffer);
-}
-
-void Triangle::cleanupUIResources(void)
-{
-	for (auto framebuffer : uiFramebuffers) {
-		vkDestroyFramebuffer(logicalDevice, framebuffer, nullptr);
-	}
-
-	vkFreeCommandBuffers(logicalDevice, uiCommandPool,
-		static_cast<uint32_t>(uiCommandBuffers.size()), uiCommandBuffers.data());
-}
-
-void Triangle::drawUI() {
-	// Start the Dear ImGui frame
-	ImGui_ImplVulkan_NewFrame();
-	ImGui_ImplGlfw_NewFrame();
-	ImGui::NewFrame();
-
-	static float f = 0.0f;
-	static int counter = 0;
-
-	ImGui::Begin("Renderer Options");
-	ImGui::Text("This is some useful text.");
-	ImGui::SliderFloat("float", &f, 0.0f, 1.0f);
-	if (ImGui::Button("Button")) {
-		counter++;
-	}
-	ImGui::SameLine();
-	ImGui::Text("counter = %d", counter);
-
-	ImGui::Text("Application average %.3f ms/frame (%.1f FPS)", 1000.0f / ImGui::GetIO().Framerate, ImGui::GetIO().Framerate);
-
-	//show file info
-
-	for (int i = 0; i < filePaths.size(); ++i)
-	{
-		ImGui::Text("%s", filePaths[i].c_str());
-
-	}
-
-	ImOGuizmo::SetRect(50.0f /* x */, HEIGHT - 130.0f /* y */, 80.0f /* square size */);
-	ImOGuizmo::BeginFrame();
-
-	auto matrix = ubo.view * ubo.model;
-	ImOGuizmo::DrawGizmo(glm::value_ptr(matrix), glm::value_ptr(ubo.projection), 0.0 /* optional: default = 0.0f */);
-
-	//auto viewMat = glm::lookAt(glm::vec3(1, 1, 0), glm::vec3(0, 1, 0), glm::vec3(1, 0, 0));
-	//auto projMat = glm::perspective(static_cast<float>(glm::radians(60.0)), 0.5f, 0.01f, 100.0f);
-
-	ImGui::End();
-
-	ImGui::Render();
-}
-
 
 void Triangle::sceneInteract(void)
 {

@@ -6,6 +6,16 @@
 #define GLM_ENABLE_EXPERIMENTAL
 #include <glm/gtx/hash.hpp>
 
+typedef glm::vec2 vec2;
+typedef glm::vec3 vec3;
+typedef glm::vec4 vec4;
+
+#define   WIDTH   1400
+#define   HEIGHT   1000 
+
+const int MAX_FRAMES_IN_FLIGHT = 2;
+const int PARTICLE_NUM = 2000;
+
 namespace base {
 struct Vertex
 {
@@ -17,6 +27,14 @@ struct Vertex
 		return pos == other.pos && color == other.color && normal == other.normal;
 	}
 };
+
+
+struct Particle {
+	vec2 position;
+	vec2 velocity;
+	vec4 color;
+};
+
 
 struct UniformBufferObject
 {
