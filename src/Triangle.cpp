@@ -326,7 +326,7 @@ void Triangle::swapCahin_recreate()
 	imageView_create();
 	framebuffer_create();
 
-	//imgui
+	//UI
 	_ui->cleanupUIResources();
 	_ui->recreateUISwapChain(imageCount, swapChainImageViews);
 }

@@ -9,7 +9,6 @@
 #include <vulkan/vulkan_win32.h>
 #include <array>
 
-const int PARTICLE_NUM = 2000;
 
 namespace triangle
 {
