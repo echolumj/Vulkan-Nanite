@@ -10,6 +10,7 @@ typedef glm::vec2 vec2;
 typedef glm::vec3 vec3;
 typedef glm::vec4 vec4;
 
+
 #define   WIDTH   1400
 #define   HEIGHT   1000 
 
@@ -26,6 +27,14 @@ struct Vertex
 	bool operator==(const Vertex& other) const {
 		return pos == other.pos && color == other.color && normal == other.normal;
 	}
+};
+
+struct Meshlet
+{
+	unsigned int vertices[64];
+	unsigned int indices[126 * 3];
+	unsigned int indexCount = 0;
+	unsigned int vertexCount = 0;
 };
 
 

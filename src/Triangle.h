@@ -48,13 +48,6 @@ namespace triangle
 		}
 	};
 
-	//basic info of swap chain creation
-	struct SwapChainSupportDetails {
-		VkSurfaceCapabilitiesKHR capabilities;
-		std::vector<VkSurfaceFormatKHR> formats;
-		std::vector<VkPresentModeKHR> presentModes;
-	};
-
 }
 using namespace triangle;
 
@@ -86,22 +79,25 @@ private:
 	void renderPass_create(void);
 	void graphicsPipline_create(void);
 	void framebuffer_create(void);
-	void vertexBuffer_create(void);
 	void commandPool_create(void);
 	void commondBuffers_create(void);
 	void syncObjects_create(void);
 	void swapCahin_recreate(void);
+	void depthResources_create(void);
 
 	void recordCommandBuffer(VkCommandBuffer commandBuffer, uint32_t imageIndex, uint32_t curFrame);
 	void cleanupSwapChain(void);
 	void sceneInteract(void);
+
+	VkFormat findDepthFormat(void);
+	VkFormat findSupportedFormat(const std::vector<VkFormat>& candidates, VkImageTiling tiling, VkFormatFeatureFlags features);
 
 	//////////////////////Auxiliary function///////////////////////////////////
 	std::vector<const char*> getRequiredExtensions(void);
 	bool CheckValidationLayerSupport(void);
 	bool CheckDeviceExtensionSupport(VkPhysicalDevice devices);
 	bool isDeviceSuitable(VkPhysicalDevice device);
-	SwapChainSupportDetails querySwapChainSupport(VkPhysicalDevice device);
+	vk::SwapChainSupportDetails querySwapChainSupport(VkPhysicalDevice device);
 
 	VkSurfaceFormatKHR chooseSwapSurfaceFormat(const std::vector<VkSurfaceFormatKHR>& formats);
 	VkPresentModeKHR chooseSwapPresentMode(const std::vector<VkPresentModeKHR>& presentModes);
@@ -109,13 +105,6 @@ private:
 
 	VkResult CreateDebugUtilsMessengerEXT(VkInstance instance, const VkDebugUtilsMessengerCreateInfoEXT* pCreateInfo, const VkAllocationCallbacks* pAllocator, VkDebugUtilsMessengerEXT* pDebugMessenger);
 	void DestoryDebugUtilsMessengerEXT(VkInstance instance, const VkDebugUtilsMessengerEXT debugMessenger, const VkAllocationCallbacks* pAllocator);
-
-	//vertex input
-	VkBuffer vertexBuffer = VK_NULL_HANDLE;
-	VkDeviceMemory vertexBufferMem = VK_NULL_HANDLE;
-	VkBuffer indiceBuffer = VK_NULL_HANDLE;
-	VkDeviceMemory indiceBufferMem = VK_NULL_HANDLE;
-	uint32_t modelIndicesNum = 0;
 
 	//handle
 	GLFWwindow* window;
@@ -130,6 +119,11 @@ private:
 	std::vector<VkImageView> swapChainImageViews;
 	VkFormat swapChainImageFormat;
 	VkExtent2D swapChainExtent;
+
+	VkImage depthImage;
+	VkImageView depthImageView;
+	VkDeviceMemory depthImageMemory;
+	VkFormat depthImageFormat;
 
 	VkPipelineLayout pipelineLayout;;
 	VkRenderPass renderPass;

@@ -103,6 +103,7 @@ void SceneManager::vertexAndIndiceBuffer_create(Model &model, std::vector<base::
 
 	//Vertex buffer
 	auto bufferSize = sizeof(vertices[0]) * vertices.size();
+	//model.vertex.count = vertices.size();
 	vk::VulkanInit::createBuffer(_physicalDevice, _logicalDevice, bufferSize, VK_BUFFER_USAGE_VERTEX_BUFFER_BIT, VK_MEMORY_PROPERTY_HOST_COHERENT_BIT |
 		VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT, model.vertex.buffer, model.vertex.memory);
 
@@ -148,3 +149,113 @@ void SceneManager::setModelMatrix(glm::vec3& rotate, glm::vec3& translate)
 	assert(_camera != nullptr);
 	_camera->setModelMatrix(rotate, translate);
 }
+
+/*****************MESH SHADER*******************/
+void SceneManager::paskAsMeshlets(std::vector<base::Vertex>& vertices, std::vector<uint32_t>& indices, std::vector<base::Meshlet> &meshlets)
+{
+	//size_t vertexBufferSize = vertexBuffer.size();
+	size_t indexBufferSize = indices.size();
+
+	struct StagingBuffer {
+		VkBuffer buffer;
+		VkDeviceMemory memory;
+	} vertexStaging, indexStaging;
+
+	base::Meshlet meshlet = {};
+
+	std::vector<uint8_t> meshletVertices(vertices.size(), 0xff);
+
+	bool flag = false;
+	for (size_t i = 0; i < indexBufferSize; i += 3)
+	{
+		unsigned int a = indices[i + 0];
+		unsigned int b = indices[i + 1];
+		unsigned int c = indices[i + 2];
+
+		uint8_t& av = meshletVertices[a];
+		uint8_t& bv = meshletVertices[b];
+		uint8_t& cv = meshletVertices[c];
+
+		if (meshlet.vertexCount + (av == 0xff) + (bv == 0xff) + (cv == 0xff) > 64 || meshlet.indexCount + 3 > 126 * 3)
+		{
+
+			meshlets.emplace_back(meshlet);
+			flag = true;
+
+			for (size_t j = 0; j < meshlet.vertexCount; ++j)
+				meshletVertices[meshlet.vertices[j]] = 0xff;
+
+			meshlet = {};
+			//}
+			//else
+			//	break;
+		}
+
+		if (av == 0xff)
+		{
+			av = meshlet.vertexCount;
+			meshlet.vertices[meshlet.vertexCount++] = a;
+		}
+
+		if (bv == 0xff)
+		{
+			bv = meshlet.vertexCount;
+			meshlet.vertices[meshlet.vertexCount++] = b;
+		}
+
+		if (cv == 0xff)
+		{
+			cv = meshlet.vertexCount;
+			meshlet.vertices[meshlet.vertexCount++] = c;
+		}
+
+		meshlet.indices[meshlet.indexCount++] = av;
+		meshlet.indices[meshlet.indexCount++] = bv;
+		meshlet.indices[meshlet.indexCount++] = cv;
+	}
+
+	if (meshlet.indexCount)
+		meshlets.emplace_back(meshlet);
+}
+
+//void SceneManager::createMeshStorageBuffer(std::vector<meshShader::Vertex>& vertices, std::vector<meshShader::Meshlet>& meshlets)
+//{
+//	verticeStorageBufferSize = vertices.size() * sizeof(meshShader::Vertex);
+//	meshletStorageBufferSize = meshlets.size() * sizeof(meshShader::Meshlet);
+//
+//	VkBuffer stagingBuffer;
+//	VkDeviceMemory stagingBufferMem;
+//
+//	//vertices
+//	createBuffer(verticeStorageBufferSize, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
+//		stagingBuffer, stagingBufferMem);
+//
+//	void* data;
+//	vkMapMemory(logicalDevice, stagingBufferMem, 0, verticeStorageBufferSize, 0, &data);
+//	memcpy(data, vertices.data(), (size_t)verticeStorageBufferSize);
+//	vkUnmapMemory(logicalDevice, stagingBufferMem);
+//
+//	createBuffer(verticeStorageBufferSize, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT,
+//		VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, verticeStorageBuffer, verticeStorageBufferMem);
+//
+//	copyBuffer(stagingBuffer, verticeStorageBuffer, verticeStorageBufferSize);
+//
+//	vkDestroyBuffer(logicalDevice, stagingBuffer, nullptr);
+//	vkFreeMemory(logicalDevice, stagingBufferMem, nullptr);
+//
+//	//meshlet
+//	createBuffer(meshletStorageBufferSize, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
+//		stagingBuffer, stagingBufferMem);
+//
+//	vkMapMemory(logicalDevice, stagingBufferMem, 0, meshletStorageBufferSize, 0, &data);
+//	memcpy(data, meshlets.data(), (size_t)meshletStorageBufferSize);
+//	vkUnmapMemory(logicalDevice, stagingBufferMem);
+//
+//	createBuffer(meshletStorageBufferSize, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT,
+//		VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, meshletStorageBuffer, meshletStorageBufferMem);
+//
+//	copyBuffer(stagingBuffer, meshletStorageBuffer, meshletStorageBufferSize);
+//
+//	vkDestroyBuffer(logicalDevice, stagingBuffer, nullptr);
+//	vkFreeMemory(logicalDevice, stagingBufferMem, nullptr);
+//}

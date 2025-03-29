@@ -10,6 +10,7 @@ namespace scene {
 
 // Single vertex buffer for all primitives
 struct VerticeResource {
+	//int count = 0;
 	VkBuffer buffer = VK_NULL_HANDLE;
 	VkDeviceMemory memory = VK_NULL_HANDLE;
 };
@@ -25,7 +26,19 @@ struct  Model
 {
 	VerticeResource vertex;
 	IndiceResource indice;
+	std::vector<base::Meshlet> meshlets;
 };
+
+//struct BaseModel : public Model
+//{
+//	VerticeResource vertex;
+//	IndiceResource indice;
+//};
+//
+//struct MeshModel : public Model
+//{
+//	std::vector<base::Meshlet> meshlets;
+//};
 
 //class Model {
 //public:
@@ -65,5 +78,6 @@ private:
 	VkQueue _queue;
 
 	void vertexAndIndiceBuffer_create(Model &model, std::vector<base::Vertex> &vertices, std::vector<uint32_t> &indices);
+	void paskAsMeshlets(std::vector<base::Vertex>& vertices, std::vector<uint32_t>& indices, std::vector<base::Meshlet>& meshlets);
 };
 }

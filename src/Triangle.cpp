@@ -13,12 +13,6 @@ const bool enableValidationLayers = true;
 #endif // NDEBUG
 
 
-const std::vector<Vertex> vertices = {
-	{{0.0f, -0.5f, 0.0f}, {1.0f, 0.0f, 0.0f},{1.0f, 0.0f, 0.0f}},
-	{{0.5f, 0.5f, 0.0f}, {0.0f, 1.0f, 0.0f}, {0.0f, 1.0f, 0.0f}},
-	{{-0.5f, 0.5f, 0.0f}, {0.0f, 0.0f, 1.0f}, {0.0f, 0.0f, 1.0f}}
-};
-
 //check whether the physical device support the required extensions 
 const std::vector<const char*> requireExtensions = {
 	VK_KHR_SWAPCHAIN_EXTENSION_NAME,
@@ -179,16 +173,13 @@ void Triangle::vulkan_init(void)
 	logicalDevice_create();
 	swapChain_create();
 	imageView_create();
-    renderPass_create();
-
 	commandPool_create();
 	commondBuffers_create();
 
-	//basic triangle
-	//vertexBuffer_create();
-	//vertexAndIndiceBuffer_create();
-	_sceneManager = new scene::SceneManager(physicalDevice, logicalDevice);
+	depthResources_create();
+	renderPass_create();
 
+	_sceneManager = new scene::SceneManager(physicalDevice, logicalDevice);
 	ubo.model = glm::mat4(1.0);
 	
 	graphicsPipline_create();
@@ -324,6 +315,7 @@ void Triangle::swapCahin_recreate()
 	//part3:recreate swap chain
 	swapChain_create();
 	imageView_create();
+	depthResources_create();
 	framebuffer_create();
 
 	//UI
@@ -344,6 +336,10 @@ void Triangle::cleanupSwapChain(void)
 	{
 		vkDestroyImageView(logicalDevice, imageView, nullptr);
 	}
+
+	vkDestroyImage(logicalDevice, depthImage, nullptr);
+	vkFreeMemory(logicalDevice, depthImageMemory, nullptr);
+	vkDestroyImageView(logicalDevice, depthImageView, nullptr);
 
 	//3.Swap Chain
 	vkDestroySwapchainKHR(logicalDevice, swapChain, nullptr);
@@ -516,7 +512,7 @@ bool Triangle::isDeviceSuitable(VkPhysicalDevice devices)
 
 	if (extensionSupport)
 	{
-		SwapChainSupportDetails swapChainDetails = querySwapChainSupport(devices);
+		vk::SwapChainSupportDetails swapChainDetails = querySwapChainSupport(devices);
 		swapChainAdequate = !(swapChainDetails.formats.empty() || swapChainDetails.presentModes.empty());
 	}
 	
@@ -625,7 +621,7 @@ void Triangle::logicalDevice_create(void)
 
 void Triangle::swapChain_create(void)
 {
-	SwapChainSupportDetails swapChainDetails = querySwapChainSupport(physicalDevice);
+	vk::SwapChainSupportDetails swapChainDetails = querySwapChainSupport(physicalDevice);
 
 	VkSurfaceFormatKHR surfaceFormat = chooseSwapSurfaceFormat(swapChainDetails.formats);
 	VkPresentModeKHR presentMode = chooseSwapPresentMode(swapChainDetails.presentModes);
@@ -738,15 +734,32 @@ void Triangle::renderPass_create(void)
 	colorAttachment.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
 	colorAttachment.finalLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
 
-	//only one subpass
+	//depth
+	VkAttachmentDescription depthAttachment{};
+	depthAttachment.format = depthImageFormat;
+	depthAttachment.samples = VK_SAMPLE_COUNT_1_BIT; //multi sample disable
+	depthAttachment.loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
+	depthAttachment.storeOp = VK_ATTACHMENT_STORE_OP_STORE;
+	depthAttachment.stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
+	depthAttachment.stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
+	depthAttachment.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+	depthAttachment.finalLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
+
+	//color
 	VkAttachmentReference colorAttachmentRef{};
 	colorAttachmentRef.attachment = 0; //index of attachment
 	colorAttachmentRef.layout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+
+	//depth
+	VkAttachmentReference depthAttachmentRef{};
+	depthAttachmentRef.attachment = 1; //index of attachment
+	depthAttachmentRef.layout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
 
 	VkSubpassDescription subpass{};
 	subpass.pipelineBindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS;//作为图形管线
 	subpass.colorAttachmentCount = 1;
 	subpass.pColorAttachments = &colorAttachmentRef;
+	subpass.pDepthStencilAttachment = &depthAttachmentRef;
 
 	VkSubpassDependency dependency{};
 	dependency.srcSubpass = VK_SUBPASS_EXTERNAL;
@@ -756,10 +769,11 @@ void Triangle::renderPass_create(void)
 	dependency.dstStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
 	dependency.dstAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
 
+	std::array<VkAttachmentDescription, 2> attachments = { colorAttachment, depthAttachment };
 	VkRenderPassCreateInfo renderPassInfo{};
 	renderPassInfo.sType = VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO;
-	renderPassInfo.attachmentCount = 1;
-	renderPassInfo.pAttachments = &colorAttachment;
+	renderPassInfo.attachmentCount = 2;
+	renderPassInfo.pAttachments = attachments.data();
 	renderPassInfo.subpassCount = 1;
 	renderPassInfo.pSubpasses = &subpass;
 	renderPassInfo.dependencyCount = 1;
@@ -849,6 +863,14 @@ void Triangle::graphicsPipline_create(void)
 
 
 	//step 6:Depth and stencil testing 
+	VkPipelineDepthStencilStateCreateInfo depth_info = {};
+	depth_info.sType = VK_STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO;
+	depth_info.depthTestEnable = VK_TRUE;
+	depth_info.depthWriteEnable = VK_TRUE;
+	depth_info.depthCompareOp = VK_COMPARE_OP_LESS;
+	depth_info.depthBoundsTestEnable = VK_FALSE;
+	depth_info.stencilTestEnable = VK_FALSE;
+	
 	//step 7:Color blending
 	VkPipelineColorBlendAttachmentState colorBlendAttachment{};
 	colorBlendAttachment.blendEnable = VK_FALSE;
@@ -904,7 +926,7 @@ void Triangle::graphicsPipline_create(void)
 	pipelineInfo.pViewportState = &viewportCreateInfo;
 	pipelineInfo.pRasterizationState = &rasterCreateInfo;
 	pipelineInfo.pMultisampleState = &multisampleCreateInfo;
-	pipelineInfo.pDepthStencilState = nullptr;//optional
+	pipelineInfo.pDepthStencilState = &depth_info;//optional
 	pipelineInfo.pColorBlendState = &colorBlendState;
 	pipelineInfo.pDynamicState = &dynamicState;// &dynamicState; //optional
 	pipelineInfo.layout = pipelineLayout;
@@ -924,18 +946,6 @@ void Triangle::graphicsPipline_create(void)
 	vkDestroyShaderModule(logicalDevice, fragmentShaderModule, nullptr);
 }
 
-void Triangle::vertexBuffer_create(void)
-{
-	auto bufferSize = sizeof(vertices[0]) * vertices.size();
-	vk::VulkanInit::createBuffer(physicalDevice, logicalDevice,  bufferSize, VK_BUFFER_USAGE_VERTEX_BUFFER_BIT, VK_MEMORY_PROPERTY_HOST_COHERENT_BIT | 
-		VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT, vertexBuffer, vertexBufferMem);
-
-	//load data
-	void* data;
-	vkMapMemory(logicalDevice, vertexBufferMem, 0, bufferSize, 0, &data);
-	memcpy(data, vertices.data(), bufferSize);
-	vkUnmapMemory(logicalDevice, vertexBufferMem);
-}
 
 void Triangle::framebuffer_create(void)
 {
@@ -945,12 +955,12 @@ void Triangle::framebuffer_create(void)
 	{
 		//specify the VkImageView objects that should be bound to the respective
 		//attachment descriptions in the render pass pAttachment array
-		VkImageView attachment[] = { swapChainImageViews[i] };
+		VkImageView attachment[] = { swapChainImageViews[i], depthImageView};
 
 		VkFramebufferCreateInfo framebufferInfo{};
 		framebufferInfo.sType = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO;
 		framebufferInfo.renderPass = renderPass;
-		framebufferInfo.attachmentCount = 1;
+		framebufferInfo.attachmentCount = 2;
 		framebufferInfo.pAttachments = attachment;
 		framebufferInfo.height = swapChainExtent.height;
 		framebufferInfo.width = swapChainExtent.width;
@@ -997,9 +1007,11 @@ void Triangle::recordCommandBuffer(VkCommandBuffer commandBuffer, uint32_t image
 	renderPassInfo.renderArea.offset = { 0,0 };
 	renderPassInfo.renderArea.extent = swapChainExtent;
 
-	VkClearValue clearColor = { 0.0f, 0.0f, 0.0f, 1.0f };
-	renderPassInfo.clearValueCount = 1;
-	renderPassInfo.pClearValues = &clearColor;
+	std::array<VkClearValue, 2> clearValues{};
+	clearValues[0].color = { {0.0f, 0.0f, 0.0f, 1.0f} };
+	clearValues[1].depthStencil = { 1.0f, 0 };
+	renderPassInfo.clearValueCount = 2;
+	renderPassInfo.pClearValues = clearValues.data();
 
 	//The render pass commands will be embedded in the primary command buffer itself and no secondary command buffers will be executed.
 	vkCmdBeginRenderPass(commandBuffer, &renderPassInfo, VK_SUBPASS_CONTENTS_INLINE);
@@ -1139,11 +1151,46 @@ void Triangle::syncObjects_create(void)
 	}
 }
 
+VkFormat Triangle::findSupportedFormat(const std::vector<VkFormat>& candidates, VkImageTiling tiling, VkFormatFeatureFlags features) {
+	for (VkFormat format : candidates) {
+		VkFormatProperties props;
+		vkGetPhysicalDeviceFormatProperties(physicalDevice, format, &props);
+
+		if (tiling == VK_IMAGE_TILING_LINEAR && (props.linearTilingFeatures & features) == features) {
+			return format;
+		}
+		else if (tiling == VK_IMAGE_TILING_OPTIMAL && (props.optimalTilingFeatures & features) == features) {
+			return format;
+		}
+	}
+
+	throw std::runtime_error("failed to find supported format!");
+}
+
+VkFormat Triangle::findDepthFormat() {
+	return findSupportedFormat(
+		{ VK_FORMAT_D32_SFLOAT, VK_FORMAT_D32_SFLOAT_S8_UINT, VK_FORMAT_D24_UNORM_S8_UINT },
+		VK_IMAGE_TILING_OPTIMAL,
+		VK_FORMAT_FEATURE_DEPTH_STENCIL_ATTACHMENT_BIT
+	);
+}
+
+void Triangle::depthResources_create(void)
+{
+	VkFormat depthFormat = findDepthFormat();
+	depthImageFormat = depthFormat;
+	vk::VulkanInit::createImage(physicalDevice, logicalDevice, swapChainExtent.width, swapChainExtent.height, depthFormat, VK_IMAGE_TILING_OPTIMAL, VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, depthImage, depthImageMemory);
+	vk::VulkanInit::createImageView(logicalDevice, depthImage, depthFormat, VK_IMAGE_ASPECT_DEPTH_BIT, depthImageView);
+
+	vk::VulkanInit::transitionImageLayout(logicalDevice, graphicsQueue, commandPool, depthImage, depthFormat, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL);
+
+}
+
 // get basic info of swap chain
 //only query
-SwapChainSupportDetails Triangle::querySwapChainSupport(VkPhysicalDevice device)
+vk::SwapChainSupportDetails Triangle::querySwapChainSupport(VkPhysicalDevice device)
 {
-	SwapChainSupportDetails swapChainDetails;
+	vk::SwapChainSupportDetails swapChainDetails;
 
 	vkGetPhysicalDeviceSurfaceCapabilitiesKHR(device, surface, &(swapChainDetails.capabilities));
 
@@ -1313,6 +1360,7 @@ void Triangle::sceneInteract(void)
 	}
 	else if(isRightMousePressed)
 	{
+		//auto z = _sceneManager->getModelMatrix()[2][3];
 		translate = glm::vec3(static_cast<float>(deltaX) * 0.01f, static_cast<float>(deltaY) * 0.01f, 0.0);
 		transzOffset = 0.0f;
 	}
