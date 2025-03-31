@@ -3,6 +3,9 @@
 #include <optional>
 #include <vector>
 
+#include <GLFW/glfw3.h>
+#include <GLFW/glfw3native.h>
+
 namespace vk {
 
 //index of queue family
@@ -26,6 +29,11 @@ struct SwapChainSupportDetails {
 
 class VulkanInit {
 public:
+
+	static void createInstance(VkInstance& instance, VkDebugUtilsMessengerEXT& debugMessenger, bool enableValidationLayers);
+	static void createSurface(VkInstance& instance, GLFWwindow* window, VkSurfaceKHR& surface);
+	static void pickPhysicalDevice(VkPhysicalDevice& pdev, VkInstance& instance, VkSurfaceKHR& surface, const std::vector<const char*>& extensions);
+
 	static void createBuffer(VkPhysicalDevice &physicalDev, VkDevice &logicalDev, VkDeviceSize size, VkBufferUsageFlags usage, VkMemoryPropertyFlags properties, VkBuffer& buffer, VkDeviceMemory& bufferMemory);
 	static void copyBuffer(VkDevice& logicalDev, VkQueue& queue, VkCommandPool& cp, VkBuffer srcBuffer, VkBuffer dstBuffer, VkDeviceSize size);
 	static void createImage(VkPhysicalDevice& physicalDev, VkDevice& logicalDev, uint32_t width, uint32_t height, VkFormat format, VkImageTiling tiling,
@@ -40,6 +48,15 @@ public:
 	static QueueFamilyIndices findQueueFamilies(VkPhysicalDevice &device, VkSurfaceKHR &surface);
 
 	static VkShaderModule createShaderModule(VkDevice& device, const std::vector<char>& code);
+
+	static bool CheckLayerSupport(const std::vector<const char*>& layers);
+	static std::vector<const char*> getRequiredExtensions(bool enableValidationLayers);
+
+	static VkResult CreateDebugUtilsMessengerEXT(VkInstance instance, const VkDebugUtilsMessengerCreateInfoEXT* pCreateInfo, const VkAllocationCallbacks* pAllocator, VkDebugUtilsMessengerEXT* pDebugMessenger);
+	static void DestoryDebugUtilsMessengerEXT(VkInstance instance, const VkDebugUtilsMessengerEXT debugMessenger, const VkAllocationCallbacks* pAllocator);
+	static bool CheckDeviceExtensionSupport(VkPhysicalDevice device, const std::vector<const char*>& extensions);
+	static vk::SwapChainSupportDetails querySwapChainSupport(VkPhysicalDevice device, VkSurfaceKHR& surface);
+	static bool isDeviceSuitable(VkPhysicalDevice device, VkSurfaceKHR& surface, const std::vector<const char*>& extensions);
 };
 
 }

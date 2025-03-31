@@ -1,7 +1,6 @@
 #include "Triangle.h"
 #include <iostream>
 #include <fstream>
-#include <set>
 #include <random>
 #include <ctime>
 #include <array>
@@ -23,18 +22,6 @@ const std::vector<const char*> validationLayers = {
 	"VK_LAYER_KHRONOS_validation"
 };
 
-static VKAPI_ATTR VkBool32 VKAPI_CALL debugCallback(
-	VkDebugUtilsMessageSeverityFlagBitsEXT messageSeverity,
-	VkDebugUtilsMessageTypeFlagsEXT messageType,
-	const VkDebugUtilsMessengerCallbackDataEXT* pCallbackData,
-	void* pUserData) {
-
-	//去除VK_DEBUG_UTILS_MESSAGE_SEVERITY_VERBOSE_BIT_EXT（正常的诊断信息）
-	if(messageSeverity >= VK_DEBUG_UTILS_MESSAGE_SEVERITY_WARNING_BIT_EXT)
-		std::cerr << "validation layer: " << pCallbackData->pMessage << std::endl;
-
-	return VK_FALSE;
-}
 
 //call back function
 //定义为静态函数，才可以做回调函数
@@ -166,10 +153,10 @@ void Triangle::window_init(void)
 
 void Triangle::vulkan_init(void)
 {
-	instance_create();
-	debugMessenger_setUp();
-	surface_create();
-	physicalDevice_pick();
+	vk::VulkanInit::createInstance(instance, debugMessenger, enableValidationLayers);
+	vk::VulkanInit::createSurface(instance, window, surface);
+	vk::VulkanInit::pickPhysicalDevice(physicalDevice, instance, surface, requireExtensions);
+
 	logicalDevice_create();
 	swapChain_create();
 	imageView_create();
@@ -376,7 +363,7 @@ void Triangle::clean_up(void)
 	vkDestroyDevice(logicalDevice, nullptr);
 
 	if (enableValidationLayers)
-		DestoryDebugUtilsMessengerEXT(instance, debugMessenger, nullptr);
+		vk::VulkanInit::DestoryDebugUtilsMessengerEXT(instance, debugMessenger, nullptr);
 	
 	//要确保surface在instance之前被销毁
 	vkDestroySurfaceKHR(instance, surface, nullptr);
@@ -386,194 +373,6 @@ void Triangle::clean_up(void)
 	glfwTerminate();
 }
 
-
-void Triangle::instance_create(void)
-{
-	if (enableValidationLayers && !CheckValidationLayerSupport()) {
-		throw std::runtime_error("validation layers requested, but not available!");
-	}
-
-	VkApplicationInfo appInfo{};//{}初始化必不可少，结构体内存在指针变量
-	appInfo.sType = VK_STRUCTURE_TYPE_APPLICATION_INFO;
-	appInfo.pApplicationName = "Hello Triangle";
-	appInfo.applicationVersion = VK_MAKE_VERSION(1, 0, 0);
-	appInfo.pEngineName = "No Engine";
-	appInfo.engineVersion = VK_MAKE_VERSION(1, 0, 0);
-	appInfo.apiVersion = VK_API_VERSION_1_0;
-
-	VkInstanceCreateInfo createInfo{};
-	createInfo.sType = VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO;
-	createInfo.pApplicationInfo = &appInfo;
-
-	auto extensions = getRequiredExtensions();
-	createInfo.enabledExtensionCount = static_cast<uint32_t>(extensions.size());
-	createInfo.ppEnabledExtensionNames = extensions.data();
-
-	//置于if语句之外，以确保它在vkCreateInstance 调用之前不会被销毁
-	VkDebugUtilsMessengerCreateInfoEXT debugCreateInfo{};
-	if (enableValidationLayers)
-	{
-		createInfo.enabledLayerCount = static_cast<uint32_t>(validationLayers.size());
-		createInfo.ppEnabledLayerNames = validationLayers.data();
-
-		//set debug information call back
-		debugCreateInfo.sType = VK_STRUCTURE_TYPE_DEBUG_UTILS_MESSENGER_CREATE_INFO_EXT;
-		debugCreateInfo.messageSeverity = VK_DEBUG_UTILS_MESSAGE_SEVERITY_VERBOSE_BIT_EXT | VK_DEBUG_UTILS_MESSAGE_SEVERITY_WARNING_BIT_EXT | VK_DEBUG_UTILS_MESSAGE_SEVERITY_ERROR_BIT_EXT;
-		debugCreateInfo.messageType = VK_DEBUG_UTILS_MESSAGE_TYPE_GENERAL_BIT_EXT | VK_DEBUG_UTILS_MESSAGE_TYPE_VALIDATION_BIT_EXT | VK_DEBUG_UTILS_MESSAGE_TYPE_PERFORMANCE_BIT_EXT;
-		debugCreateInfo.pfnUserCallback = debugCallback;
-		
-		createInfo.pNext = (VkDebugUtilsMessengerCreateInfoEXT*)&debugCreateInfo;
-	}
-	else
-	{
-		createInfo.enabledLayerCount = 0;
-		createInfo.ppEnabledLayerNames = nullptr;
-	}
-
-	if (vkCreateInstance(&createInfo, nullptr, &instance) != VK_SUCCESS)
-	{
-		throw std::runtime_error("failed to create instance!");
-	}
-}
-
-// create debugMessenger
-VkResult Triangle::CreateDebugUtilsMessengerEXT(VkInstance instance, const VkDebugUtilsMessengerCreateInfoEXT* pCreateInfo, const VkAllocationCallbacks* pAllocator, VkDebugUtilsMessengerEXT* pDebugMessenger)
-{
-	auto func = (PFN_vkCreateDebugUtilsMessengerEXT)vkGetInstanceProcAddr(instance, "vkCreateDebugUtilsMessengerEXT");
-	if (func == nullptr)
-	{
-		return VK_ERROR_EXTENSION_NOT_PRESENT;
-	}
-	return func(instance, pCreateInfo, pAllocator, pDebugMessenger);
-}
-
-//destory debugMessenger
-void Triangle::DestoryDebugUtilsMessengerEXT(VkInstance instance, const VkDebugUtilsMessengerEXT debugMessenger, const VkAllocationCallbacks* pAllocator)
-{
-	auto func = (PFN_vkDestroyDebugUtilsMessengerEXT)vkGetInstanceProcAddr(instance, "vkDestroyDebugUtilsMessengerEXT");
-	if (func != nullptr)
-		func(instance, debugMessenger, pAllocator);
-}
-
-void Triangle::debugMessenger_setUp(void)
-{
-	//如果不开启验证层，就不会又相应的验证信息反馈
-	if (!enableValidationLayers) return;
-
-	VkDebugUtilsMessengerCreateInfoEXT createInfo{};
-	createInfo.sType = VK_STRUCTURE_TYPE_DEBUG_UTILS_MESSENGER_CREATE_INFO_EXT;
-	createInfo.messageSeverity = VK_DEBUG_UTILS_MESSAGE_SEVERITY_VERBOSE_BIT_EXT | VK_DEBUG_UTILS_MESSAGE_SEVERITY_WARNING_BIT_EXT | VK_DEBUG_UTILS_MESSAGE_SEVERITY_ERROR_BIT_EXT;
-	createInfo.messageType = VK_DEBUG_UTILS_MESSAGE_TYPE_GENERAL_BIT_EXT | VK_DEBUG_UTILS_MESSAGE_TYPE_VALIDATION_BIT_EXT | VK_DEBUG_UTILS_MESSAGE_TYPE_PERFORMANCE_BIT_EXT;
-	createInfo.pfnUserCallback = debugCallback;
-
-	if (CreateDebugUtilsMessengerEXT(instance, &createInfo, nullptr, &debugMessenger) != VK_SUCCESS)
-	{
-		throw std::runtime_error("failed to set up debug messenger!");
-	}
-}
-
-
-void Triangle::surface_create(void)
-{
-	//用vulkan创建surface
-	//配置相关信息
-	
-	VkWin32SurfaceCreateInfoKHR  surfaceCreateInfo{};
-	surfaceCreateInfo.sType = VK_STRUCTURE_TYPE_WIN32_SURFACE_CREATE_INFO_KHR;
-	surfaceCreateInfo.hwnd = glfwGetWin32Window(window);//获取窗口handle
-	surfaceCreateInfo.hinstance = GetModuleHandle(nullptr);
-
-	if (vkCreateWin32SurfaceKHR(instance, &surfaceCreateInfo, nullptr, &surface))
-	{
-		throw std::runtime_error(" failed to create window surface .");
-	}
-	
-	
-	//if (glfwCreateWindowSurface(instance, window, nullptr, &surface) != VK_SUCCESS) {
-	//	throw std::runtime_error("failed to create window surface!");
-	//}
-	
-}
-bool Triangle::isDeviceSuitable(VkPhysicalDevice devices)
-{
-	//VkPhysicalDeviceProperties property;
-	//VkPhysicalDeviceFeatures feature;
-
-	//vkGetPhysicalDeviceProperties(devices, &property);
-	//vkGetPhysicalDeviceFeatures(devices, &feature);
-
-	// 独显 + geometryShader
-	//return (property.deviceType == VK_PHYSICAL_DEVICE_TYPE_DISCRETE_GPU) && feature.geometryShader;
-
-	vk::QueueFamilyIndices indices = vk::VulkanInit::findQueueFamilies(devices, surface);
-
-	bool extensionSupport = CheckDeviceExtensionSupport(devices);//swapchain
-	bool swapChainAdequate = false;
-
-	if (extensionSupport)
-	{
-		vk::SwapChainSupportDetails swapChainDetails = querySwapChainSupport(devices);
-		swapChainAdequate = !(swapChainDetails.formats.empty() || swapChainDetails.presentModes.empty());
-	}
-	
-	return indices.isComplete() && extensionSupport && swapChainAdequate;
-}
-
-void Triangle::physicalDevice_pick(void)
-{
-	uint32_t deviceCount;
-	vkEnumeratePhysicalDevices(instance, &deviceCount, nullptr);
-
-	if (deviceCount == 0)
-	{
-		throw std::runtime_error("failed to find physical device .");
-	}
-
-	std::vector<VkPhysicalDevice> devices(deviceCount);
-	vkEnumeratePhysicalDevices(instance, &deviceCount, devices.data());
-
-	//选择策略：选取最先满足条件的physicaldevice
-	for (const auto phydevice : devices)
-	{
-		if (isDeviceSuitable(phydevice))
-		{
-			physicalDevice = phydevice;
-			break;
-		}
-	}
-
-	if (physicalDevice == VK_NULL_HANDLE)
-	{
-		throw std::runtime_error("no suitable device.");
-	}
-
-	//test code: tools
-	PFN_vkGetPhysicalDeviceToolPropertiesEXT vkGetPhysicalDeviceToolPropertiesEXT = NULL;
-	vkGetPhysicalDeviceToolPropertiesEXT = (PFN_vkGetPhysicalDeviceToolPropertiesEXT)vkGetInstanceProcAddr(instance, "vkGetPhysicalDeviceToolPropertiesEXT");
-	if(vkGetPhysicalDeviceToolPropertiesEXT == NULL)
-		throw std::runtime_error("get instance function failed");
-
-	uint32_t toolCount = 0;
-	auto result = vkGetPhysicalDeviceToolPropertiesEXT(physicalDevice, &toolCount, nullptr);
-	if(toolCount <= 0 || result != VK_SUCCESS)
-		throw std::runtime_error("tool of physical device is none");
-
-	std::vector<VkPhysicalDeviceToolPropertiesEXT> tools(toolCount);
-	result = vkGetPhysicalDeviceToolPropertiesEXT(physicalDevice, &toolCount, tools.data());
-	if(result != VK_SUCCESS)
-		throw std::runtime_error("tool of physical device is none");
-
-	printf("Active tools:\n");
-	for (uint32_t i = 0; i < toolCount; i++) {
-		printf("Tool Name: %s\n", tools[i].name);
-		printf("Description: %s\n", tools[i].description);
-		printf("Tool Version: %s\n", tools[i].version);
-		printf("Purposes: %u\n", tools[i].purposes); // Use bitmask for purposes
-		printf("Layer Name: %s\n", tools[i].layer[0] ? tools[i].layer : "None");
-		printf("---------------------------------\n");
-	}
-
-}
 
 void Triangle::logicalDevice_create(void)
 {
@@ -621,7 +420,7 @@ void Triangle::logicalDevice_create(void)
 
 void Triangle::swapChain_create(void)
 {
-	vk::SwapChainSupportDetails swapChainDetails = querySwapChainSupport(physicalDevice);
+	vk::SwapChainSupportDetails swapChainDetails = vk::VulkanInit::querySwapChainSupport(physicalDevice, surface);
 
 	VkSurfaceFormatKHR surfaceFormat = chooseSwapSurfaceFormat(swapChainDetails.formats);
 	VkPresentModeKHR presentMode = chooseSwapPresentMode(swapChainDetails.presentModes);
@@ -1186,32 +985,6 @@ void Triangle::depthResources_create(void)
 
 }
 
-// get basic info of swap chain
-//only query
-vk::SwapChainSupportDetails Triangle::querySwapChainSupport(VkPhysicalDevice device)
-{
-	vk::SwapChainSupportDetails swapChainDetails;
-
-	vkGetPhysicalDeviceSurfaceCapabilitiesKHR(device, surface, &(swapChainDetails.capabilities));
-
-	uint32_t formatCount;
-	vkGetPhysicalDeviceSurfaceFormatsKHR(device, surface, &formatCount, nullptr);
-
-	if (formatCount != 0)
-	{
-		swapChainDetails.formats.resize(formatCount);
-		vkGetPhysicalDeviceSurfaceFormatsKHR(device, surface, &formatCount, swapChainDetails.formats.data());
-	}
-
-	uint32_t presentModeCount;
-	vkGetPhysicalDeviceSurfacePresentModesKHR(device, surface, &presentModeCount, nullptr);
-	if (presentModeCount != 0)
-	{
-		swapChainDetails.presentModes.resize(presentModeCount);
-		vkGetPhysicalDeviceSurfacePresentModesKHR(device, surface, &presentModeCount, swapChainDetails.presentModes.data());
-	}
-	return swapChainDetails;
-}
 
 VkSurfaceFormatKHR Triangle::chooseSwapSurfaceFormat(const std::vector<VkSurfaceFormatKHR>& formats)
 {
@@ -1260,81 +1033,6 @@ VkExtent2D Triangle::chooseSwapExtent(const VkSurfaceCapabilitiesKHR& capabiliti
 	}
 }
 
-
-bool Triangle::CheckValidationLayerSupport(void)
-{
-	uint32_t layerCount;
-	vkEnumerateInstanceLayerProperties(&layerCount, nullptr);
-
-	std::vector<VkLayerProperties> layerProperties(layerCount);
-	vkEnumerateInstanceLayerProperties(&layerCount, layerProperties.data());
-
-	std::cout << "all supported layer names" << "\n";
-	for (const char* layerName : validationLayers)
-	{
-		bool layFound = false;
-		for (const auto& layerProperties : layerProperties)
-		{
-			//★print out all names of supported layer 
-			std::cout << layerProperties.layerName << "\n";
-			if (strcmp(layerName, layerProperties.layerName) == 0)
-			{
-				layFound = true;
-				break;
-			}
-		}
-		if (!layFound)
-			return false;
-	}
-	return true;
-}
-
-bool Triangle::CheckDeviceExtensionSupport(VkPhysicalDevice devices)
-{
-	uint32_t extensionCount;
-	vkEnumerateDeviceExtensionProperties(devices, nullptr, &extensionCount, nullptr);
-
-	std::vector<VkExtensionProperties> availableExtension(extensionCount);
-	vkEnumerateDeviceExtensionProperties(devices, nullptr, &extensionCount, availableExtension.data());
-
-	std::set<std::string> deviceExtensions(requireExtensions.begin(), requireExtensions.end());
-
-	for(const auto& extension : availableExtension)
-	{
-		deviceExtensions.erase(extension.extensionName);
-	}
-
-	//作为选择physical device的判定条件之一，不需要抛出程序错误，强制中断程序
-	//if (!deviceExtensions.empty()) {
-	//	throw std::runtime_error("extension not fulfill");
-	//}
-
-	return deviceExtensions.empty();
-}
-
-//glfw + layers information call back
-std::vector<const char*> Triangle::getRequiredExtensions(void)
-{
-	uint32_t glfwExtensionCount = 0;
-	const char** glfwExtensions;
-	glfwExtensions = glfwGetRequiredInstanceExtensions(&glfwExtensionCount);
-
-	std::vector<const char*> extensions(glfwExtensions, glfwExtensionCount + glfwExtensions);
-
-	if (enableValidationLayers)
-	{
-		extensions.push_back(VK_EXT_DEBUG_UTILS_EXTENSION_NAME);
-	}
-
-	extensions.push_back(VK_KHR_GET_PHYSICAL_DEVICE_PROPERTIES_2_EXTENSION_NAME);
-
-	//★print all required extensions
-	std::cout << "all required extensions" << "\n";
-	for (const auto extension : extensions)
-		std::cout << extension << "\n";
-
-	return extensions;
-}
 
 void Triangle::sceneInteract(void)
 {

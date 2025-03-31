@@ -68,10 +68,6 @@ private:
 
 	void drawFrame(void);
 	
-	void instance_create(void);
-	void debugMessenger_setUp(void);
-	void surface_create(void);
-	void physicalDevice_pick(void);
 	void logicalDevice_create(void);
 	void swapChain_create(void);
 	void imageView_create(void);
@@ -93,18 +89,9 @@ private:
 	VkFormat findSupportedFormat(const std::vector<VkFormat>& candidates, VkImageTiling tiling, VkFormatFeatureFlags features);
 
 	//////////////////////Auxiliary function///////////////////////////////////
-	std::vector<const char*> getRequiredExtensions(void);
-	bool CheckValidationLayerSupport(void);
-	bool CheckDeviceExtensionSupport(VkPhysicalDevice devices);
-	bool isDeviceSuitable(VkPhysicalDevice device);
-	vk::SwapChainSupportDetails querySwapChainSupport(VkPhysicalDevice device);
-
 	VkSurfaceFormatKHR chooseSwapSurfaceFormat(const std::vector<VkSurfaceFormatKHR>& formats);
 	VkPresentModeKHR chooseSwapPresentMode(const std::vector<VkPresentModeKHR>& presentModes);
 	VkExtent2D chooseSwapExtent(const VkSurfaceCapabilitiesKHR& capabilities);//获取最新的窗口大小
-
-	VkResult CreateDebugUtilsMessengerEXT(VkInstance instance, const VkDebugUtilsMessengerCreateInfoEXT* pCreateInfo, const VkAllocationCallbacks* pAllocator, VkDebugUtilsMessengerEXT* pDebugMessenger);
-	void DestoryDebugUtilsMessengerEXT(VkInstance instance, const VkDebugUtilsMessengerEXT debugMessenger, const VkAllocationCallbacks* pAllocator);
 
 	//handle
 	GLFWwindow* window;
