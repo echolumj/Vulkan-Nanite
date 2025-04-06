@@ -26,8 +26,8 @@ namespace triangle
 			return bindingDescription;
 		}
 
-		static std::array<VkVertexInputAttributeDescription, 3> getAttributeDescriptions() {
-			std::array<VkVertexInputAttributeDescription, 3> attributeDescriptions{};
+		static std::vector<VkVertexInputAttributeDescription> getAttributeDescriptions() {
+			std::vector<VkVertexInputAttributeDescription> attributeDescriptions(3, VkVertexInputAttributeDescription{});
 
 			attributeDescriptions[0].binding = 0;
 			attributeDescriptions[0].location = 0;
@@ -66,17 +66,11 @@ private:
 	void main_loop(void);
 	void clean_up(void);
 
-	void drawFrame(void);
-	
-	void logicalDevice_create(void);
-	void swapChain_create(void);
-	void imageView_create(void);
+	void drawFrame(void); 
 
-	void renderPass_create(void);
 	void graphicsPipline_create(void);
 	void framebuffer_create(void);
-	void commandPool_create(void);
-	void commondBuffers_create(void);
+
 	void syncObjects_create(void);
 	void swapCahin_recreate(void);
 	void depthResources_create(void);
@@ -88,10 +82,6 @@ private:
 	VkFormat findDepthFormat(void);
 	VkFormat findSupportedFormat(const std::vector<VkFormat>& candidates, VkImageTiling tiling, VkFormatFeatureFlags features);
 
-	//////////////////////Auxiliary function///////////////////////////////////
-	VkSurfaceFormatKHR chooseSwapSurfaceFormat(const std::vector<VkSurfaceFormatKHR>& formats);
-	VkPresentModeKHR chooseSwapPresentMode(const std::vector<VkPresentModeKHR>& presentModes);
-	VkExtent2D chooseSwapExtent(const VkSurfaceCapabilitiesKHR& capabilities);//获取最新的窗口大小
 
 	//handle
 	GLFWwindow* window;
@@ -101,11 +91,8 @@ private:
 	VkPhysicalDevice physicalDevice;
 	VkDevice logicalDevice;
 
+	vk::SwapChainInfo swapChainInfo= {};
 	VkSwapchainKHR swapChain;
-	std::vector<VkImage> swapChainImages;
-	std::vector<VkImageView> swapChainImageViews;
-	VkFormat swapChainImageFormat;
-	VkExtent2D swapChainExtent;
 
 	VkImage depthImage;
 	VkImageView depthImageView;

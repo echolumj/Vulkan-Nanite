@@ -1,6 +1,5 @@
 #include "vulkanInit.h"
 #include <iostream>
-
 #include<set>
 
 using namespace vk;
@@ -44,7 +43,7 @@ void VulkanInit::createInstance(VkInstance &instance, VkDebugUtilsMessengerEXT &
 	};
 
 
-	if (enableValidationLayers && !vk::VulkanInit::CheckLayerSupport(validationLayers)) {
+ 	if (enableValidationLayers && !vk::VulkanInit::CheckLayerSupport(validationLayers)) {
 		throw std::runtime_error("validation layers requested, but not available!");
 	}
 
@@ -119,6 +118,55 @@ void VulkanInit::createSurface(VkInstance &instance, GLFWwindow *window, VkSurfa
 
 }
 
+void VulkanInit::createLogicalDevice(VkDevice& dev, VkPhysicalDevice& pdev, VkSurfaceKHR& surface, const std::vector<const char*>& extension, bool enableValidationLayers = false)
+{
+	vk::QueueFamilyIndices indice = vk::VulkanInit::findQueueFamilies(pdev, surface);
+
+	VkDeviceQueueCreateInfo queueCreateInfo{};
+	queueCreateInfo.sType = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO;
+	queueCreateInfo.queueFamilyIndex = indice.graphicsFamily.value();
+	queueCreateInfo.queueCount = 1;
+	float priorities = 1.0f;
+	queueCreateInfo.pQueuePriorities = &priorities;
+
+	//创建逻辑设备时，我们需要指明要使用物理设备所支持的特性中的哪一些特性
+	VkPhysicalDeviceFeatures deviceFeatures = {};
+
+	VkDeviceCreateInfo createInfo{};
+	createInfo.sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO;
+	createInfo.pEnabledFeatures = &deviceFeatures;
+	createInfo.pQueueCreateInfos = &queueCreateInfo;
+	createInfo.queueCreateInfoCount = 1;
+
+	//在choose physical device 中已经检查过extension的支持
+	createInfo.enabledExtensionCount = static_cast<uint32_t>(extension.size());//static_cast<uint32_t>(requireExtensions.size());
+	createInfo.ppEnabledExtensionNames = extension.data();
+
+	const std::vector<const char*> validationLayers = {
+			"VK_LAYER_KHRONOS_validation"
+	};
+
+	if (enableValidationLayers)
+	{
+
+		createInfo.enabledLayerCount = static_cast<uint32_t>(validationLayers.size());
+		createInfo.ppEnabledLayerNames = validationLayers.data();
+	}
+	else
+	{
+		createInfo.enabledLayerCount = 0;
+	}
+
+	if (vkCreateDevice(pdev, &createInfo, nullptr, &dev) != VK_SUCCESS)
+	{
+		throw std::runtime_error("failed to create logical device!");
+	}
+
+	//vkGetDeviceQueue(dev, indice.graphicAndComputeFamily.value(), 0, &graphicsQueue);
+	//vkGetDeviceQueue(dev, indice.graphicAndComputeFamily.value(), 0, &computeQueue);
+	//vkGetDeviceQueue(dev, indice.presentFamily.value(), 0, &presentQueue);
+}
+
 void VulkanInit::pickPhysicalDevice(VkPhysicalDevice &pdev, VkInstance &instance, VkSurfaceKHR& surface, const std::vector<const char*>& extensions)
 {
 	uint32_t deviceCount;
@@ -172,8 +220,264 @@ void VulkanInit::pickPhysicalDevice(VkPhysicalDevice &pdev, VkInstance &instance
 		printf("Layer Name: %s\n", tools[i].layer[0] ? tools[i].layer : "None");
 		printf("---------------------------------\n");
 	}
+}
+
+void VulkanInit::createSwapChain(SwapChainInfo &swapchaininfo, VkSwapchainKHR &swapChain, VkPhysicalDevice &pdev, VkDevice &dev, VkSurfaceKHR &surface, GLFWwindow *window)
+{
+	vk::SwapChainSupportDetails swapChainDetails = vk::VulkanInit::querySwapChainSupport(pdev, surface);
+
+	//choose SwapSurface Format
+	VkSurfaceFormatKHR surfaceFormat = swapChainDetails.formats[0];
+	for (const auto& format : swapChainDetails.formats)
+	{
+		if (format.format == VK_FORMAT_B8G8R8_UNORM && format.colorSpace == VK_COLOR_SPACE_SRGB_NONLINEAR_KHR)
+			surfaceFormat = format;
+	}
+
+	//chooseSwapPresentMode
+	VkPresentModeKHR presentMode = VK_PRESENT_MODE_FIFO_KHR;
+	for (const auto& mode : swapChainDetails.presentModes)
+	{
+		if (mode == VK_PRESENT_MODE_MAILBOX_KHR)
+		{
+			presentMode = mode;
+			break;
+		}
+		else if (mode == VK_PRESENT_MODE_IMMEDIATE_KHR)
+			presentMode = VK_PRESENT_MODE_IMMEDIATE_KHR;
+	}
+
+	//chooseSwapExtent
+	VkExtent2D swapExtent;
+	if (swapChainDetails.capabilities.currentExtent.width != UINT32_MAX) {
+		swapExtent = swapChainDetails.capabilities.currentExtent;
+	}
+	else {
+		int width, height;
+		glfwGetFramebufferSize(window, &width, &height);
+
+		VkExtent2D actualExtent = {
+			static_cast<uint32_t>(width),
+			static_cast<uint32_t>(height)
+		};
+
+		swapExtent.width = static_cast<uint32_t>(std::fmax(swapChainDetails.capabilities.minImageExtent.width, std::fmin(swapChainDetails.capabilities.maxImageExtent.width, actualExtent.width)));
+		swapExtent.height = static_cast<uint32_t>(std::fmax(swapChainDetails.capabilities.minImageExtent.height, std::fmin(swapChainDetails.capabilities.maxImageExtent.height, actualExtent.height)));
+	}
+
+
+	swapchaininfo.imageCount = swapChainDetails.capabilities.minImageCount + 1;
+
+	if (swapChainDetails.capabilities.maxImageCount > 0 && swapchaininfo.imageCount > swapChainDetails.capabilities.maxImageCount)
+	{
+		swapchaininfo.imageCount = swapChainDetails.capabilities.maxImageCount;
+	}
+
+	//create swap chain part
+	VkSwapchainCreateInfoKHR createInfo = {};
+	createInfo.sType = VK_STRUCTURE_TYPE_SWAPCHAIN_CREATE_INFO_KHR;
+	createInfo.surface = surface;
+
+	createInfo.minImageCount = swapchaininfo.imageCount; //why add 1
+	createInfo.imageFormat = surfaceFormat.format;
+	createInfo.imageColorSpace = surfaceFormat.colorSpace;
+	createInfo.imageExtent = swapExtent;
+	createInfo.imageArrayLayers = 1;//specifies the amount of layers each image consists of
+	createInfo.imageUsage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT;
+
+	vk::QueueFamilyIndices indices = vk::VulkanInit::findQueueFamilies(pdev, surface);
+	uint32_t queueFamilyIndices[] = { indices.graphicsFamily.value(), indices.presentFamily.value() };
+
+	//图形渲染和image呈现在surface的队列族不一致：并发模式
+	if (indices.presentFamily != indices.graphicsFamily)
+	{
+		createInfo.imageSharingMode = VK_SHARING_MODE_CONCURRENT;
+		createInfo.queueFamilyIndexCount = 2;
+		createInfo.pQueueFamilyIndices = queueFamilyIndices;
+	}
+	else
+	{
+		createInfo.imageSharingMode = VK_SHARING_MODE_EXCLUSIVE;
+		createInfo.queueFamilyIndexCount = 0;
+		createInfo.pQueueFamilyIndices = nullptr;
+	}
+
+	createInfo.preTransform = swapChainDetails.capabilities.currentTransform;
+	createInfo.compositeAlpha = VK_COMPOSITE_ALPHA_OPAQUE_BIT_KHR;
+	createInfo.presentMode = presentMode;
+	createInfo.clipped = VK_TRUE;
+	createInfo.oldSwapchain = VK_NULL_HANDLE;
+
+	if (vkCreateSwapchainKHR(dev, &createInfo, nullptr, &swapChain) != VK_SUCCESS)
+	{
+		throw std::runtime_error("failed to create swap chain!");
+	}
+
+	vkGetSwapchainImagesKHR(dev, swapChain, &swapchaininfo.imageCount, nullptr);
+	swapchaininfo.images.resize(swapchaininfo.imageCount);
+	vkGetSwapchainImagesKHR(dev, swapChain, &swapchaininfo.imageCount, swapchaininfo.images.data());
+
+	swapchaininfo.extent = swapExtent;
+	swapchaininfo.format = surfaceFormat.format;
+
+	//swapchain image view 
+	swapchaininfo.imageViews.resize(swapchaininfo.images.size());
+
+	//create an image view for each image
+	for (int i = 0; i < swapchaininfo.imageViews.size(); i++)
+	{
+		vk::VulkanInit::createImageView(dev, swapchaininfo.images[i], swapchaininfo.format, VK_IMAGE_ASPECT_COLOR_BIT, swapchaininfo.imageViews[i]);
+	}
+}
+
+void VulkanInit::createCommandPool(VkCommandPool &cp, VkDevice &dev, uint32_t fIndex)
+{
+	VkCommandPoolCreateInfo poolCreateInfo{};
+	poolCreateInfo.sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO;
+	poolCreateInfo.queueFamilyIndex = fIndex;
+	poolCreateInfo.flags = VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT; // Optional  neither
+
+	if (vkCreateCommandPool(dev, &poolCreateInfo, nullptr, &cp) != VK_SUCCESS) {
+		throw std::runtime_error("failed to create command pool!");
+	}
 
 }
+
+void VulkanInit::createCommondBuffers(std::vector<VkCommandBuffer>& cbs, VkDevice& dev, VkCommandPool &cp, VkCommandBufferLevel level)
+{
+	VkCommandBufferAllocateInfo allocInfo{};
+	allocInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
+	allocInfo.commandPool = cp;
+	allocInfo.level = level;
+	allocInfo.commandBufferCount = (uint32_t)cbs.size();
+
+	if (vkAllocateCommandBuffers(dev, &allocInfo, cbs.data()) != VK_SUCCESS)
+	{
+		throw std::runtime_error("failed to allocate command buffers!");
+	}
+}
+
+void VulkanInit::createRenderPass(VkRenderPass &renderPass, VkDevice &device, std::vector<VkAttachmentDescription> &colorAttachments, VkAttachmentDescription &depthAttachment, std::vector<VkSubpassDescription> &subpasses, std::vector<VkSubpassDependency> &dependencies)
+{
+	std::vector<VkAttachmentDescription> attachments = colorAttachments;
+	attachments.emplace_back(depthAttachment);
+	VkRenderPassCreateInfo renderPassInfo{};
+	renderPassInfo.sType = VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO;
+	renderPassInfo.attachmentCount = attachments.size();
+	renderPassInfo.pAttachments = attachments.data();
+	renderPassInfo.subpassCount = subpasses.size();
+	renderPassInfo.pSubpasses = subpasses.data();
+	renderPassInfo.dependencyCount = dependencies.size();
+	renderPassInfo.pDependencies = dependencies.data();
+
+	if (vkCreateRenderPass(device, &renderPassInfo, nullptr, &renderPass) != VK_SUCCESS) {
+		throw std::runtime_error("failed to create render pass!");
+	}
+}
+
+void VulkanInit::createFrameBuffer(VkFramebuffer &fb, VkDevice &dev, VkRenderPass &rp, std::vector<VkImageView> &cimage, VkImageView &dimage, VkExtent2D extent)
+{
+	//specify the VkImageView objects that should be bound to the respective
+	//attachment descriptions in the render pass pAttachment array
+	std::vector<VkImageView> attachments = cimage;
+	attachments.emplace_back(dimage);
+
+	VkFramebufferCreateInfo framebufferInfo{};
+	framebufferInfo.sType = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO;
+	framebufferInfo.renderPass = rp;
+	framebufferInfo.attachmentCount = attachments.size();
+	framebufferInfo.pAttachments = attachments.data();
+	framebufferInfo.height = extent.height;
+	framebufferInfo.width = extent.width;
+	framebufferInfo.layers = 1;
+
+	if (vkCreateFramebuffer(dev, &framebufferInfo, nullptr, &fb) != VK_SUCCESS)
+	{
+		throw std::runtime_error("failed to create framebuffer!");
+	}
+
+}
+
+/**************************Class Type*********************************/
+VkAttachmentDescription VulkanInit::AttachmentDescription(VkFormat format, VkSampleCountFlagBits samples, VkAttachmentLoadOp loadOp, VkAttachmentStoreOp storeOp, VkImageLayout initialLayout, VkImageLayout finalLayout)
+{
+	VkAttachmentDescription description = {};
+	description.format = format;
+	description.samples = samples; //multi sample disable
+	description.loadOp = loadOp;
+	description.storeOp = storeOp;
+	description.stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
+	description.stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
+	//the layout of the pixels in memory
+	description.initialLayout = initialLayout;
+	description.finalLayout = finalLayout;
+
+	return description;
+}
+
+VkSubpassDescription VulkanInit::Subpass(std::vector<VkAttachmentDescription>& colorAttachments, VkAttachmentDescription& depthAttachment)
+{
+	//color
+	//temp [TODO]
+	static std::vector<VkAttachmentReference> attachmentRefs(colorAttachments.size());
+	for (int i = 0; i < colorAttachments.size(); ++i)
+	{
+		attachmentRefs[i] = {};
+		attachmentRefs[i].attachment = i; //index of attachment
+		attachmentRefs[i].layout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+	}
+
+	//depth
+	//temp [TODO]
+	static VkAttachmentReference depthAttachmentRef{};
+	depthAttachmentRef.attachment = colorAttachments.size();
+	depthAttachmentRef.layout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
+
+	VkSubpassDescription subpass{};
+	subpass.pipelineBindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS;//作为图形管线
+	subpass.colorAttachmentCount = attachmentRefs.size();
+	subpass.pColorAttachments = attachmentRefs.data();
+	subpass.pDepthStencilAttachment = &depthAttachmentRef;
+
+	return subpass;
+}
+
+VkSubpassDependency VulkanInit::SubpassDependency(uint32_t srcSubpass, uint32_t dstSubpass, VkPipelineStageFlags srcStageMask, VkPipelineStageFlags dstStageMask, VkAccessFlags srcAccessMask, VkAccessFlags dstAccessMask)
+{
+	VkSubpassDependency dependency{};
+	dependency.srcSubpass = srcSubpass;
+	dependency.dstSubpass = dstSubpass; //index of subpass
+	dependency.srcStageMask = srcStageMask;
+	dependency.srcAccessMask = srcAccessMask;
+	dependency.dstStageMask = dstStageMask;
+	dependency.dstAccessMask = dstAccessMask;
+
+	return dependency;
+}
+
+VkPipelineShaderStageCreateInfo VulkanInit::PipelineShaderStage(VkShaderStageFlagBits stage, VkShaderModule module)
+{
+	VkPipelineShaderStageCreateInfo shaderStageInfo{};
+	shaderStageInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
+	shaderStageInfo.stage = stage;
+	shaderStageInfo.module = module;
+	shaderStageInfo.pName = "main"; // entry points
+
+	return shaderStageInfo;
+}
+
+VkPipelineVertexInputStateCreateInfo VulkanInit::PipelineVertexInputState(std::vector<VkVertexInputBindingDescription>& bindingDescs, std::vector<VkVertexInputAttributeDescription>& attrDescs)
+{
+	VkPipelineVertexInputStateCreateInfo inputCreateInfo{};
+	inputCreateInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO;
+	inputCreateInfo.vertexBindingDescriptionCount = bindingDescs.size();
+	inputCreateInfo.pVertexBindingDescriptions = bindingDescs.data();
+	inputCreateInfo.vertexAttributeDescriptionCount = attrDescs.size();
+	inputCreateInfo.pVertexAttributeDescriptions = attrDescs.data();
+
+	return inputCreateInfo;
+}
+
 
 bool VulkanInit::CheckDeviceExtensionSupport(VkPhysicalDevice device, const std::vector<const char*> &extensions)
 {
@@ -410,7 +714,7 @@ void VulkanInit::createImage(VkPhysicalDevice& physicalDev, VkDevice& logicalDev
 	vkBindImageMemory(logicalDev, image, imageMemory, 0);
 }
 
-void VulkanInit::createImageView(VkDevice& logicalDev, VkImage image, VkFormat format, VkImageAspectFlags aspectMask, VkImageView& imageView)
+void VulkanInit::createImageView(VkDevice& logicalDev, VkImage &image, VkFormat format, VkImageAspectFlags aspectMask, VkImageView& imageView)
 {
 	VkImageViewCreateInfo viewInfo{};
 	viewInfo.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
