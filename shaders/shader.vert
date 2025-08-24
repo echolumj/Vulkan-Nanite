@@ -17,5 +17,5 @@ layout ( push_constant ) uniform UBO
 
 void main() {
 	gl_Position = ubo.proj * ubo.view * ubo.model * vec4(inPosition, 1.0);
-	fragColor = (inNormal + (4, 4, 4)) / 4.0;
+	fragColor = (inNormal + (1.0, 1.0, 1.0)) / 2.0;
 }

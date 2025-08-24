@@ -57,7 +57,6 @@ static void MouseButtonCallback(GLFWwindow* window, int button, int action, int 
 		}
 		else if (action == GLFW_RELEASE) {
 			isRightMousePressed = false;
-
 		}
 	}
 }
@@ -392,6 +391,13 @@ void Triangle::clean_up(void)
 
 void Triangle::graphicsPipline_create(void)
 {
+	const std::string glslcPath = std::string("D:/0_Software/VulkanSDK/1.3.290.0/Bin/glslc.exe");
+
+	bool fragResult = vk::VulkanInit::CompileShader(glslcPath, std::string(SHADER_DIR)+ std::string("/shader.frag"), std::string(SPV_DIR) + std::string("/frag.spv"));
+	bool vertResult = vk::VulkanInit::CompileShader(glslcPath, std::string(SHADER_DIR) + std::string("/shader.vert"), std::string(SPV_DIR) + std::string("/vert.spv"));
+
+	assert(fragResult && vertResult);
+
 	auto vertexShaderCode = readFile(RELATIVE_PATH + std::string("/spvs/vert.spv"));
 	auto fragShaderCode = readFile(RELATIVE_PATH + std::string("/spvs/frag.spv"));
 
@@ -408,99 +414,25 @@ void Triangle::graphicsPipline_create(void)
 	auto attributeDesc = Vertex::getAttributeDescriptions();
 	std::vector<VkVertexInputBindingDescription> bindingDescs = { bindingDesc };
 	VkPipelineVertexInputStateCreateInfo vertexInputCreateInfo = vk::VulkanInit::PipelineVertexInputState(bindingDescs, attributeDesc);
+	VkPipelineInputAssemblyStateCreateInfo inputAssemblyCreateInfo = vk::VulkanInit::PipelineInputAssemblyState(VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST, VK_FALSE);
 
-	//step 3:input assembly 
-	VkPipelineInputAssemblyStateCreateInfo inputAssemblyCreateInfo{};
-	inputAssemblyCreateInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO;
-	inputAssemblyCreateInfo.topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST;
-	inputAssemblyCreateInfo.primitiveRestartEnable = VK_FALSE;
+	//Viewports and scissors
+	std::vector<VkViewport> viewports = { VkViewport{0.0f, 0.0f, (float)swapChainInfo.extent.width , (float)swapChainInfo.extent.height, 0.0f, 1.0f } };
+	std::vector<VkRect2D> scissors = { VkRect2D{ VkOffset2D{ 0, 0 } , swapChainInfo.extent } };
+	VkPipelineViewportStateCreateInfo viewportCreateInfo = vk::VulkanInit::PipelineViewportState(viewports, scissors);
+	VkPipelineRasterizationStateCreateInfo rasterCreateInfo = vk::VulkanInit::PipelineRasterizationState(VK_FALSE, VK_POLYGON_MODE_FILL, VK_CULL_MODE_NONE, VK_FRONT_FACE_CLOCKWISE);
+	VkPipelineMultisampleStateCreateInfo multisampleCreateInfo = vk::VulkanInit::PipelineMultisampleState(VK_FALSE, VK_SAMPLE_COUNT_1_BIT);
+	VkPipelineDepthStencilStateCreateInfo depth_info = vk::VulkanInit::PipelineDepthStencilState(VK_TRUE, VK_TRUE, VK_COMPARE_OP_LESS, VK_FALSE, VK_FALSE);
+	VkPipelineColorBlendAttachmentState colorBlendAttachment = vk::VulkanInit::PipelineColorBlendAttachmentState(VK_FALSE, VK_COLOR_COMPONENT_R_BIT | VK_COLOR_COMPONENT_G_BIT | VK_COLOR_COMPONENT_B_BIT | VK_COLOR_COMPONENT_A_BIT);
 
-	//step 4:Viewports and scissors
-	VkViewport viewport = VkViewport{0.0f, 0.0f, (float)swapChainInfo.extent.width , (float)swapChainInfo.extent.height, 0.0f, 1.0f };
+	std::vector<VkPipelineColorBlendAttachmentState> colorBlendAttachments = { colorBlendAttachment };
+	VkPipelineColorBlendStateCreateInfo colorBlendState = vk::VulkanInit::PipelineColorBlendState(VK_FALSE, colorBlendAttachments);
+	std::vector <VkDynamicState> dynamicStates = {VK_DYNAMIC_STATE_VIEWPORT, VK_DYNAMIC_STATE_SCISSOR};
+	VkPipelineDynamicStateCreateInfo dynamicState = vk::VulkanInit::PipelineDynamicState(dynamicStates);
+	VkPushConstantRange pushConstant = vk::VulkanInit::PushConstantRange(0, sizeof(base::UniformBufferObject), VK_SHADER_STAGE_VERTEX_BIT);
 
-	VkRect2D scissor{};
-	scissor.extent = swapChainInfo.extent;//show all
-	scissor.offset = { 0, 0 };
-
-	VkPipelineViewportStateCreateInfo viewportCreateInfo{};
-	viewportCreateInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_STATE_CREATE_INFO;
-	viewportCreateInfo.viewportCount = 1;
-	viewportCreateInfo.pViewports = &viewport;
-	viewportCreateInfo.scissorCount = 1;
-	viewportCreateInfo.pScissors = &scissor;
-
-	//step 5:Rasterizer
-	VkPipelineRasterizationStateCreateInfo rasterCreateInfo{};
-	rasterCreateInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO;
-	rasterCreateInfo.depthClampEnable = VK_FALSE;
-	rasterCreateInfo.rasterizerDiscardEnable = VK_FALSE;//★
-	rasterCreateInfo.polygonMode = VK_POLYGON_MODE_FILL;
-	rasterCreateInfo.lineWidth = 1.0f;
-	rasterCreateInfo.cullMode = VK_CULL_MODE_BACK_BIT;
-	rasterCreateInfo.frontFace = VK_FRONT_FACE_CLOCKWISE;
-	rasterCreateInfo.depthBiasEnable = VK_FALSE;
-
-	//step 5:Multisample 
-	VkPipelineMultisampleStateCreateInfo multisampleCreateInfo{};
-	multisampleCreateInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO;
-	multisampleCreateInfo.sampleShadingEnable = VK_FALSE;
-	multisampleCreateInfo.rasterizationSamples = VK_SAMPLE_COUNT_1_BIT;
-
-
-	//step 6:Depth and stencil testing 
-	VkPipelineDepthStencilStateCreateInfo depth_info = {};
-	depth_info.sType = VK_STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO;
-	depth_info.depthTestEnable = VK_TRUE;
-	depth_info.depthWriteEnable = VK_TRUE;
-	depth_info.depthCompareOp = VK_COMPARE_OP_LESS;
-	depth_info.depthBoundsTestEnable = VK_FALSE;
-	depth_info.stencilTestEnable = VK_FALSE;
-	
-	//step 7:Color blending
-	VkPipelineColorBlendAttachmentState colorBlendAttachment{};
-	colorBlendAttachment.blendEnable = VK_FALSE;
-	colorBlendAttachment.colorWriteMask = VK_COLOR_COMPONENT_R_BIT | VK_COLOR_COMPONENT_G_BIT | VK_COLOR_COMPONENT_B_BIT | VK_COLOR_COMPONENT_A_BIT;
-
-	VkPipelineColorBlendStateCreateInfo colorBlendState{};
-	colorBlendState.sType = VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO;
-	colorBlendState.logicOpEnable = VK_FALSE;
-	colorBlendState.logicOp = VK_LOGIC_OP_COPY;
-	colorBlendState.attachmentCount = 1;
-	colorBlendState.pAttachments = &colorBlendAttachment;
-	colorBlendState.blendConstants[0] = 0.0f;
-	colorBlendState.blendConstants[1] = 0.0f;
-	colorBlendState.blendConstants[2] = 0.0f;
-	colorBlendState.blendConstants[3] = 0.0f;
-
-	//step 8:Dynamic state 
-	VkDynamicState dynamicStates[] = {
-		VK_DYNAMIC_STATE_VIEWPORT,
-		VK_DYNAMIC_STATE_SCISSOR
-	};
- 
-	VkPipelineDynamicStateCreateInfo dynamicState = {};
-	dynamicState.sType = VK_STRUCTURE_TYPE_PIPELINE_DYNAMIC_STATE_CREATE_INFO;
-	dynamicState.dynamicStateCount = 2;
-	dynamicState.pDynamicStates = dynamicStates;
-
-
-	//pushconstant 
-	VkPushConstantRange pushConstant = {};
-	pushConstant.offset = 0;
-	pushConstant.size = sizeof(base::UniformBufferObject);
-	pushConstant.stageFlags = VK_SHADER_STAGE_VERTEX_BIT;
-
-	//step 9:Pipeline layout 
-	VkPipelineLayoutCreateInfo pipelineLayoutInfo{};
-	pipelineLayoutInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
-	pipelineLayoutInfo.setLayoutCount = 0;
-	pipelineLayoutInfo.pushConstantRangeCount = 1;
-	pipelineLayoutInfo.pPushConstantRanges = &pushConstant;
-	         
-	if (vkCreatePipelineLayout(logicalDevice, &pipelineLayoutInfo, NULL, &pipelineLayout) != VK_SUCCESS)
-	{
-		throw std::runtime_error("failed to create graphics pipeline . ");
-	}
+	std::vector<VkPushConstantRange> pushConstants = { pushConstant };
+	vk::VulkanInit::createPipelineLayout(pipelineLayout, logicalDevice, pushConstants);
 
 	VkGraphicsPipelineCreateInfo pipelineInfo{};
 	pipelineInfo.sType = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO;
@@ -517,7 +449,6 @@ void Triangle::graphicsPipline_create(void)
 	pipelineInfo.layout = pipelineLayout;
 	pipelineInfo.renderPass = renderPass;
 	pipelineInfo.subpass = 0;//index of used subpass
-
 	pipelineInfo.basePipelineHandle = VK_NULL_HANDLE;
 	pipelineInfo.basePipelineIndex = -1;
 
@@ -744,7 +675,7 @@ void Triangle::sceneInteract(void)
 	{
 		// 根据偏移量更新旋转角度
 		rotationAngles.y = static_cast<float>(deltaX) * 0.01f; // 绕Y轴旋转
-		rotationAngles.x = static_cast<float>(deltaY) * 0.01f; // 绕X轴旋转
+		rotationAngles.x = static_cast<float>(-deltaY) * 0.01f; // 绕X轴旋转
 	}
 	else if(isRightMousePressed)
 	{

@@ -2,6 +2,7 @@
 #include <vulkan/vulkan.h>
 #include <optional>
 #include <vector>
+#include <string>
 
 #include <GLFW/glfw3.h>
 #include <GLFW/glfw3native.h>
@@ -46,13 +47,23 @@ public:
 	static void createCommondBuffers(std::vector<VkCommandBuffer>& cbs, VkDevice& dev, VkCommandPool& cp, VkCommandBufferLevel level);
 	static void createRenderPass(VkRenderPass& renderPass, VkDevice& device, std::vector<VkAttachmentDescription>& colorAttachments, VkAttachmentDescription& depthAttachment, std::vector<VkSubpassDescription>& subpasses, std::vector<VkSubpassDependency>& dependencies);
 	static void createFrameBuffer(VkFramebuffer& fb, VkDevice& dev, VkRenderPass& rp, std::vector<VkImageView>& cimage, VkImageView& dimage, VkExtent2D extent);
+	static void createPipelineLayout(VkPipelineLayout& pipelineLayout, VkDevice& dev, std::vector<VkPushConstantRange>& pushConstant);
 
 	static VkSubpassDescription Subpass(std::vector<VkAttachmentDescription>& colorAttachments, VkAttachmentDescription& depthAttachment);
 	static VkAttachmentDescription AttachmentDescription(VkFormat format, VkSampleCountFlagBits samples, VkAttachmentLoadOp loadOp, VkAttachmentStoreOp storeOp, VkImageLayout initialLayout, VkImageLayout finalLayout);
 	static VkSubpassDependency SubpassDependency(uint32_t srcSubpass, uint32_t dstSubpass, VkPipelineStageFlags srcStageMask, VkPipelineStageFlags dstStageMask, VkAccessFlags srcAccessMask, VkAccessFlags dstAccessMask);
 	static VkPipelineShaderStageCreateInfo PipelineShaderStage(VkShaderStageFlagBits stage, VkShaderModule module);
 	static VkPipelineVertexInputStateCreateInfo PipelineVertexInputState(std::vector<VkVertexInputBindingDescription> &bindingDescs, std::vector<VkVertexInputAttributeDescription>& attrDescs);
-	
+	static VkPipelineInputAssemblyStateCreateInfo PipelineInputAssemblyState(VkPrimitiveTopology topology, VkBool32 restartEnable);
+	static VkPipelineViewportStateCreateInfo PipelineViewportState(std::vector<VkViewport>& viewports, std::vector<VkRect2D>& scissors);
+	static VkPipelineRasterizationStateCreateInfo PipelineRasterizationState(VkBool32 discardEnable, VkPolygonMode polygonMode, VkCullModeFlags cullMode, VkFrontFace frontFace);
+	static VkPipelineMultisampleStateCreateInfo PipelineMultisampleState(VkBool32 enable, VkSampleCountFlagBits samples);
+	static VkPipelineDepthStencilStateCreateInfo PipelineDepthStencilState(VkBool32 depthTestEnable, VkBool32 depthWriteEnable, VkCompareOp compare, VkBool32 boundTest, VkBool32 stencilTestEnable);
+	static VkPipelineColorBlendAttachmentState PipelineColorBlendAttachmentState(VkBool32 blendEnable, VkColorComponentFlags colorWriteMask);
+	static VkPipelineColorBlendStateCreateInfo PipelineColorBlendState(VkBool32 logicOpEnable, std::vector<VkPipelineColorBlendAttachmentState>& attachments);
+	static VkPipelineDynamicStateCreateInfo PipelineDynamicState(std::vector<VkDynamicState> &dynamicStates);
+	static VkPushConstantRange PushConstantRange(uint32_t offset, uint32_t size, VkShaderStageFlags stageFlags);
+
 	static vk::SwapChainSupportDetails querySwapChainSupport(VkPhysicalDevice device, VkSurfaceKHR& surface);
 	static uint32_t findMemoryType(VkPhysicalDevice& physicalDev, uint32_t typeFilter, VkMemoryPropertyFlags properties);
 	static QueueFamilyIndices findQueueFamilies(VkPhysicalDevice& device, VkSurfaceKHR& surface);
@@ -74,6 +85,7 @@ public:
 	static bool CheckDeviceExtensionSupport(VkPhysicalDevice device, const std::vector<const char*>& extensions);
 	static bool isDeviceSuitable(VkPhysicalDevice device, VkSurfaceKHR& surface, const std::vector<const char*>& extensions);
 	static bool CheckLayerSupport(const std::vector<const char*>& layers);
+	static bool CompileShader(const std::string& glslcPath, const std::string inputFile, const std::string outputFile);
 };
 
 }

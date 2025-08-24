@@ -3,6 +3,9 @@ set(CMAKE_CXX_STANDARD 17)
 project(Vulkan-Nanite)
 
 add_definitions(-DRELATIVE_PATH="${CMAKE_CURRENT_SOURCE_DIR}")
+add_definitions(-DSHADER_DIR="${CMAKE_CURRENT_SOURCE_DIR}/shaders")
+add_definitions(-DSPV_DIR="${CMAKE_CURRENT_SOURCE_DIR}/spvs")
+
 
 # 包含子项目。
 add_subdirectory ("src")

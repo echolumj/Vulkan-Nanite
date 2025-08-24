@@ -478,6 +478,121 @@ VkPipelineVertexInputStateCreateInfo VulkanInit::PipelineVertexInputState(std::v
 	return inputCreateInfo;
 }
 
+VkPipelineInputAssemblyStateCreateInfo VulkanInit::PipelineInputAssemblyState(VkPrimitiveTopology topology, VkBool32 restartEnable)
+{
+	VkPipelineInputAssemblyStateCreateInfo inputAssemblyCreateInfo{};
+	inputAssemblyCreateInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO;
+	inputAssemblyCreateInfo.topology = topology;
+	inputAssemblyCreateInfo.primitiveRestartEnable = restartEnable;
+
+	return inputAssemblyCreateInfo;
+}
+
+
+VkPipelineViewportStateCreateInfo VulkanInit::PipelineViewportState(std::vector<VkViewport>& viewports, std::vector<VkRect2D>& scissors)
+{
+	VkPipelineViewportStateCreateInfo viewportCreateInfo{};
+	viewportCreateInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_STATE_CREATE_INFO;
+	viewportCreateInfo.viewportCount = viewports.size();
+	viewportCreateInfo.pViewports = viewports.data();
+	viewportCreateInfo.scissorCount = scissors.size();
+	viewportCreateInfo.pScissors = scissors.data();
+
+	return viewportCreateInfo;
+}
+
+VkPipelineRasterizationStateCreateInfo VulkanInit::PipelineRasterizationState(VkBool32 discardEnable, VkPolygonMode polygonMode, VkCullModeFlags cullMode, VkFrontFace frontFace)
+{
+	VkPipelineRasterizationStateCreateInfo rasterCreateInfo{};
+	rasterCreateInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO;
+	rasterCreateInfo.depthClampEnable = VK_FALSE;
+	rasterCreateInfo.rasterizerDiscardEnable = discardEnable;//бя
+	rasterCreateInfo.polygonMode = polygonMode;
+	rasterCreateInfo.lineWidth = 1.0f;
+	rasterCreateInfo.cullMode = cullMode;
+	rasterCreateInfo.frontFace = frontFace;
+	rasterCreateInfo.depthBiasEnable = VK_FALSE;
+	return rasterCreateInfo;
+}
+
+
+VkPipelineMultisampleStateCreateInfo VulkanInit::PipelineMultisampleState(VkBool32 enable, VkSampleCountFlagBits samples)
+{
+	VkPipelineMultisampleStateCreateInfo multisampleCreateInfo{};
+	multisampleCreateInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO;
+	multisampleCreateInfo.sampleShadingEnable = enable;
+	multisampleCreateInfo.rasterizationSamples = samples;
+	return multisampleCreateInfo;
+}
+
+VkPipelineDepthStencilStateCreateInfo VulkanInit::PipelineDepthStencilState(VkBool32 depthTestEnable, VkBool32 depthWriteEnable, VkCompareOp compare, VkBool32 boundTest, VkBool32 stencilTestEnable)
+{
+	VkPipelineDepthStencilStateCreateInfo depth_info = {};
+	depth_info.sType = VK_STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO;
+	depth_info.depthTestEnable = depthTestEnable;
+	depth_info.depthWriteEnable = depthWriteEnable;
+	depth_info.depthCompareOp = compare;
+	depth_info.depthBoundsTestEnable = boundTest;
+	depth_info.stencilTestEnable = stencilTestEnable;
+	return depth_info;
+}
+
+VkPipelineColorBlendAttachmentState VulkanInit::PipelineColorBlendAttachmentState(VkBool32 blendEnable, VkColorComponentFlags colorWriteMask)
+{
+	VkPipelineColorBlendAttachmentState colorBlendAttachment{};
+	colorBlendAttachment.blendEnable = blendEnable;
+	colorBlendAttachment.colorWriteMask = colorWriteMask;
+	return colorBlendAttachment;
+}
+
+VkPipelineColorBlendStateCreateInfo VulkanInit::PipelineColorBlendState(VkBool32 logicOpEnable, std::vector<VkPipelineColorBlendAttachmentState>& attachments)
+{
+	VkPipelineColorBlendStateCreateInfo colorBlendState{};
+	colorBlendState.sType = VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO;
+	colorBlendState.logicOpEnable = logicOpEnable;
+	colorBlendState.logicOp = VK_LOGIC_OP_COPY;
+	colorBlendState.attachmentCount = attachments.size();
+	colorBlendState.pAttachments = attachments.data();
+	colorBlendState.blendConstants[0] = 0.0f;
+	colorBlendState.blendConstants[1] = 0.0f;
+	colorBlendState.blendConstants[2] = 0.0f;
+	colorBlendState.blendConstants[3] = 0.0f;
+	return colorBlendState;
+}
+
+VkPipelineDynamicStateCreateInfo VulkanInit::PipelineDynamicState(std::vector<VkDynamicState> &dynamicStates)
+{
+	VkPipelineDynamicStateCreateInfo dynamicState = {};
+	dynamicState.sType = VK_STRUCTURE_TYPE_PIPELINE_DYNAMIC_STATE_CREATE_INFO;
+	dynamicState.dynamicStateCount = dynamicStates.size();
+	dynamicState.pDynamicStates = dynamicStates.data();
+	return dynamicState;
+}
+
+VkPushConstantRange VulkanInit::PushConstantRange(uint32_t offset, uint32_t size, VkShaderStageFlags stageFlags)
+{
+	VkPushConstantRange pushConstant = {};
+	pushConstant.offset = offset;
+	pushConstant.size = size;
+	pushConstant.stageFlags = stageFlags;
+	return pushConstant;
+}
+
+void VulkanInit::createPipelineLayout(VkPipelineLayout &pipelineLayout, VkDevice& dev,  std::vector<VkPushConstantRange> &pushConstant)
+{
+	VkPipelineLayoutCreateInfo pipelineLayoutInfo{};
+	pipelineLayoutInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
+	pipelineLayoutInfo.setLayoutCount = 0;
+	//pipelineLayoutInfo.pSetLayouts = (descSetLayouts.size() > 0 ? descSetLayouts.data() : nullptr);
+	pipelineLayoutInfo.pushConstantRangeCount = pushConstant.size();
+	pipelineLayoutInfo.pPushConstantRanges = pushConstant.data();
+
+	if (vkCreatePipelineLayout(dev, &pipelineLayoutInfo, NULL, &pipelineLayout) != VK_SUCCESS)
+	{
+		throw std::runtime_error("failed to create graphics pipeline . ");
+	}
+}
+
 
 bool VulkanInit::CheckDeviceExtensionSupport(VkPhysicalDevice device, const std::vector<const char*> &extensions)
 {
@@ -602,6 +717,24 @@ bool VulkanInit::isDeviceSuitable(VkPhysicalDevice device, VkSurfaceKHR& surface
 	}
 
 	return indices.isComplete() && extensionSupport && swapChainAdequate;
+}
+
+bool VulkanInit::CompileShader(const std::string& glslcPath, const std::string inputFile, const std::string outputFile) 
+{
+	std::string command = glslcPath + " " + inputFile + " -o " + outputFile;
+
+	std::cout << "Executing: " << command << std::endl;
+
+	int result = std::system(command.c_str());
+
+	if (result == 0) {
+		std::cout << "Shader compiled successfully: " << outputFile << std::endl;
+		return true;
+	}
+	else {
+		std::cerr << "Shader compilation failed with error code: " << result << std::endl;
+		return false;
+	}
 }
 
 

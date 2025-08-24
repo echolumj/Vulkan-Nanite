@@ -65,9 +65,7 @@ private:
 	void vulkan_init(void);
 	void main_loop(void);
 	void clean_up(void);
-
 	void drawFrame(void); 
-
 	void graphicsPipline_create(void);
 	void framebuffer_create(void);
 
